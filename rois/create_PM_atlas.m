@@ -168,4 +168,27 @@ fprintf('N clusters = %d\n',size(cluster_coords,2));
 vol.fname = 'PM_voxel_clusters.nii';
 spm_write_vol(vol,pm_clusters);
 
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function [new_data] = cluster_threshold(data, vox, type, val)
+
+% 1. value-based threshold
+data(data < val) = 0;
+
+% 2. extent-based threshold
+% logical mask to get cluster sizes
+clusters = bwconncomp(logical(data),type);
+extent = cellfun('length', clusters.PixelIdxList);
+
+% mask by cluster threshold
+extent(extent < vox) = 0;
+clusters.PixelIdxList = clusters.PixelIdxList(logical(extent));
+
+% create new data file with only clusters > X voxels
+new_data = zeros(size(data));
+idx = vertcat(clusters.PixelIdxList{:})';
+new_data(idx) = data(idx);
+
+end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
