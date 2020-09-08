@@ -1,0 +1,1209 @@
+---
+title: Posterior medial network dynamics, CamCan movie watching - Relationship to Episodic Memory
+author: Rose Cooper
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    theme: cerulean
+    toc: true
+    toc_float:
+      collapsed: false
+---
+
+These analyses take all subjects from the Discovery and Replication samples who have Episodic Memory data from the CamCAN behavioral task to investigate the relationship between PMN connectivity patterns during movie watching and episodic memory.  
+
+This script uses intersubject representational similarity (IS-RSA) of brain and behavior, see [Finn et al., 2020](https://www.sciencedirect.com/science/article/pii/S1053811920303153?via%3Dihub).  
+
+Intersubject brain and behavior representational dissimilarity matrices (RDMs) are first generated -- the brain matrix reflects the *dissimilarity* of PMN time-varying connectivity (or activity, control analysis) between every pair of subjects using 1-pearson's correlation. The behavior matrix reflects the dissimilarity between two subjects' detailed episodic memory scores, calculated using both Nearest Neighbor (NN) and 'Anna K' models:  
+
+* NN assumes that subjects who are more similar in behavior are more similar in brain function. AK assumes that subjects who perform well show brain patterns that are similar, but subjects who perform poorly show variable brain patterns.
+
+Then, the spearman correlation is computed between the lower triangle of the behavior and brain intersubject RDMs. Permutation tests, shuffling subject labels in the brain matrix, are used to test the signficance of the intersubject brain-behavior relationship.  
+
+# Setup
+```{r, warning=FALSE, message=FALSE}
+
+library(gridExtra)
+library(grid)
+library(cowplot)
+library(ggpubr)
+library(tidyverse)
+library(knitr)
+library(psych)
+library(reshape2)
+library(pander)
+library(lessR)
+library(rstatix)
+library(abind)
+
+### load in all functions:
+se <- function(x) sqrt(var(x)/length(x))  #function to calculate SE
+ci <- function(x) (sqrt(var(x)/length(x))) * 1.96  #function to calculate 95% CI
+
+## colors of PMN subsystems
+module.colors <- c("#fcd841","#3c7ff5","#8ce9f7")  #for "Core", "Ventral", "Ventral-Core"
+heat.colors  <- colorRampPalette(c("#009FFF","white","#ff5858"))
+
+
+nIter = 10000   #number of permutations: 10,000 for publication
+
+cat('Intersubject RSA p values computed over',nIter,'permutations')
+
+```
+
+**R package information**
+```{r}
+sessionInfo()
+```
+
+# Behavioral data
+Episodic memory scores reflect detailed source memory -- the number of trials where subjects verbally reported specific details about the scene context of an object.   
+Note that this task contains an emotion manipulation (scene contexts can be negative, neutral, or positive valence), so only neutral trials are considered here. Although detailed memory scores for the neutral-only condition correlate extremely highly with scores across all conditions.  
+```{r}
+
+# all fmri subjects who also have behavioral data from independent task:
+behav.data <- read.csv('../../behavioral-data/EmotionalMemory_subset.csv')
+
+# remove one subject with a VERY high number of error trials:
+subs_remove <- c('sub-CC220203')
+
+
+#grab relevant measures
+behav.data <- behav.data[-c(match(subs_remove,behav.data$SubID)),c("SubID","PriPrNeu","DetNeuPic")]
+# PriPrNeu   = corrected priming score of neutral condition objects (for a control analysis)
+# DetNeuPic  = number of trials for which participants had detailed memory for the object's (neutral) scene context
+
+colnames(behav.data) <- c("SubID","Priming","Episodic")
+
+# order subjects (I'll do the same ordering when loading fmri data)
+behav.data  <- behav.data[order(as.character(behav.data$SubID)),]
+behav.data$SubID=factor(behav.data$SubID, levels=as.character(behav.data$SubID))
+
+
+NSubs=nrow(behav.data)
+cat(NSubs,'subjects who have episodic memory data available for analysis')
+
+
+#order of subjects by behavioral score, for visualizing matrices
+episodic.ord <- order(behav.data$Episodic, decreasing = F)
+priming.ord  <- order(behav.data$Priming, decreasing = F)
+
+```
+
+Correlation between episodic and priming (control measure) scores and distribution of episodic data:  
+```{r, fig.width=16, fig.height=7}
+
+my.cor <- cor.test(behav.data$Priming, behav.data$Episodic)
+
+# plot IQ ~ Memory across subject
+p1 <- ggplot(behav.data, aes(x=Episodic, y=Priming)) +
+     geom_point(aes(color=Episodic),size=5) +
+     geom_smooth(method = "lm", color="black", size=2) +
+     geom_label(label=paste('r=',round(my.cor$estimate,3),sep=""), x=32, y=0, size=8) +
+     ggtitle('Priming and\nDetailed Episodic Memory') +
+     theme(plot.title = element_text(hjust = 0.5, size=32, face="plain"),
+          axis.line.x = element_line(color = "black", size = 1), axis.line.y = element_line(color = "black", size = 1),
+          axis.text.x = element_text(size = 20), axis.text.y = element_text(size = 24),
+          axis.title.y = element_text(size = 28, margin=margin(0,10,0,0)),
+          axis.title.x = element_text(size = 28, margin=margin(10,0,0,0)),
+          panel.background = element_blank(),
+          legend.position="none", strip.text.x = element_text(size=22),
+          plot.margin = margin(1, 0.5, 0.5, 0.5, "cm"))
+
+
+### now plot episodic distribution
+p2 <- ggplot(behav.data, aes(x=Episodic, y=..count..)) +
+     geom_histogram(bins=10, color="gray60",fill="gray60") +
+     ggtitle('Detailed Episodic Memory Scores') +
+     scale_y_continuous(expand=c(.01,0,.1,0)) + ylab('N Subjects') +
+     theme(plot.title = element_text(hjust = 0.5, size=32, face="plain"),
+          axis.line.x = element_line(color = "black", size = 1), axis.line.y = element_line(color = "black", size = 1),
+          axis.text.x = element_text(size = 20), axis.text.y = element_text(size = 24),
+          axis.title.y = element_text(size = 28,  margin=margin(0,10,0,0)),
+          axis.title.x = element_text(size = 28, margin=margin(10,0,0,0)),
+          panel.background = element_blank(),
+          legend.position="none", strip.text.x = element_text(size=22),
+          plot.margin = margin(1, 0.5, 0.5, 0.5, "cm"))
+
+ggarrange(p1,p2,ncol=2,nrow=1,widths=c(2,3))
+
+```
+
+# Time-averaged PMN connectivity  
+Time-averaged module connectivity as calculated from the the correlation of time-series over the entire duration of the movie within CamCan-PM-network_[Discovery/Replication].Rmd. Does average connectvity strength relate to episodic memory performance?   
+```{r}
+
+# grab module connectivity from both groups
+load('./Discovery/module-connectivity_Discovery.RData')
+module.A <- data.summary.subject
+load('./Replication/module-connectivity_Replication.RData')
+module.B <- data.summary.subject
+module.conn <- rbind(module.A,module.B)
+
+modules <- unique(module.conn$Module)
+
+
+#filter by subjects who have behavioral data and **match order to behavioral data**
+sub.idx <- module.conn$Var3 %in% behav.data$SubID
+module.conn <- module.conn[sub.idx,]  
+module.conn <- module.conn[order(as.character(module.conn$Var3)),]
+module.conn$Var3=factor(module.conn$Var3, levels=as.character(behav.data$SubID))
+colnames(module.conn)[1] <- "SubID"
+
+
+
+### correlation between module connectivity and EPISODIC
+plots <- list()
+cor.data <- data.frame(Module = modules, r = array(0,length(modules)), p = array(0,length(modules)))
+for (m in 1:length(modules)) {
+  # connectivity values for this module
+  mod.subset <- subset(module.conn, Module == modules[m])
+  
+  # merge connectivity values and behavior values by subject ID
+  mod.data   <- merge(mod.subset, behav.data, by="SubID")
+  
+  c = cor.test(mod.data$Strength, mod.data$Episodic)
+  cor.data[m,] <- c(modules[m], round(c$estimate,3), round(c$p.value,3))
+  
+  
+  # plot
+  min.x <- min(mod.data$Strength + .1) # for correlation label
+  
+  plots[[m]] <- ggplot(mod.data, aes(x=Strength, y=Episodic)) +
+    geom_point(color=module.colors[m], size=4) +
+    ggtitle(modules[m]) +
+    geom_smooth(method = "lm", color="black", size=2) +
+    geom_label(x=min.x, y=39, size=5,
+              label = paste('r =',round(c$estimate,3),sep=" ")) +
+    scale_y_continuous(limits=c(0,40)) +
+    labs(y="Episodic Memory", x="Connectivity Strength") +
+    theme(plot.title = element_text(hjust = 0.5, size=28, face="plain"),
+          axis.line.x = element_line(color = "black", size = 1), axis.line.y = element_line(color = "black", size = 1),
+          axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
+          axis.title.y = element_text(size = 20, margin=margin(0,10,0,0)),
+          axis.title.x = element_text(size = 20, margin=margin(10,0,0,0)),
+          panel.background = element_blank(),
+          legend.position="none", strip.text.x = element_text(size=22),
+          plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"))
+}
+
+kable(cor.data, caption="Correlation between module connectivity strength and episodic memory")
+
+meancor.plots <- ggarrange(plotlist = plots, ncol=3) +
+        theme(plot.tag = element_text(size = 38, face = "bold"),
+              plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm")) +
+        labs(tag="a")
+
+```
+
+# Time-varying PMN connectivity
+Now, I am loading in the time-varying connectivity vectors generated within CamCan-PM-network_[Discovery/Replication].Rmd, which reflect the mean connectivity within the Ventral and Core subsystems, and between them, per subject and time point.  
+```{r}
+
+# grab time series from both groups
+load('./Discovery/time-varying_Discovery.RData')
+module.A <- TV.module.connectivity
+load('./Replication/time-varying_Replication.RData')
+module.B <- TV.module.connectivity
+TV <- rbind(module.A,module.B)
+
+
+#filter by subjects who have behavioral data and **match order to behavioral data**
+sub.idx <- TV$Subject %in% behav.data$SubID
+TV <- TV[sub.idx,]  
+TV <- TV[order(as.character(TV$Subject)),]
+TV$Subject=factor(TV$Subject, levels=as.character(behav.data$SubID))
+
+TV$Module=as.factor(TV$Module)
+
+```
+
+## Episodic intersubject RSA  
+Intersubject RSA for episodic memory scores:  
+
+* Does intersubject similarity of time-varying connectivity during the movie relate to the intersubject similarity of episodic memory?  
+
+### Time-varying connectivity RDMs  
+
+* Calculates the intersubject RDMs (1 - pearson correlation) for time-varying connectivity by PMN subsystem.    
+* Sorted by behavioral score for visualization only.    
+```{r, fig.width=18, fig.height=4.75}
+
+#### initiate stats data frame for time-varying connectivity NN and Anna K models
+my.stats <- data.frame(array(0,c(length(modules)*2,4)))
+colnames(my.stats) <- c('Model','Module','r','p')
+
+
+ord <- episodic.ord  #order to sort subjects by for visualization (they are sorted in numeric order for analyses)
+
+
+### calculate subjxsubj correlation matrices, by PMN subsystem
+module.RDMs.Time <- array(0,c(NSubs,NSubs,length(modules)))
+
+plots.images = list()
+for (m in 1:length(modules)) {
+  module_data <- subset(TV, Module == modules[m]) %>%    #time-varying connectivity for this subsystem
+                   spread(Subject, Conn)  %>%            #now spread so subjects are in columns
+                   droplevels()
+ 
+  # which columns are subjects?
+  subcols <- grep('sub-',colnames(module_data))
+
+  # correlate subject time series, taking **dissimilarity (1- pearson correlation)**
+  module_matrix <- 1 - cor(module_data[,subcols])
+  diag(module_matrix) <- NA
+  
+  # catch to make sure subID col names are in same order as behavData subIDs
+  check = setdiff(as.character(behav.data$SubID),colnames(module_matrix))
+  if (!is_empty(check)) { stop('SubID order in brain RDM does not match behavioral data')}
+  
+  
+  ## store (in behav subject order)
+  module.RDMs.Time[,,m] <- module_matrix
+  
+  
+  #sort by behavioral *score* for visualization purposes
+  module.matrix.sort <- data.frame(module_matrix[ord,ord])
+  colnames(module.matrix.sort) <- 1:nrow(module.matrix.sort)
+  module.matrix.sort$Subject   <- 1:nrow(module.matrix.sort)
+    
+  plots.images[[m]] <- ggplot(melt(module.matrix.sort,"Subject"), 
+                              aes(Subject, variable, fill=value)) +
+    geom_tile() +
+    scale_fill_gradientn(colors = heat.colors(10), na.value = "gray80",
+                         guide = guide_colorbar(frame.colour = "black"),
+                         limits=c(0,2)) +
+    ggtitle(modules[m]) +  labs(fill="Dissimilarity", y="Subject") +
+    scale_x_continuous(breaks = c(12,55), labels = c("Low Memory", "High Memory")) +
+    scale_y_discrete(breaks = c(12,55), labels = c("Low Memory", "High Memory")) +
+    theme(plot.title = element_text(hjust = 0.5, size=26, margin=margin(0,0,10,0), face="plain"), 
+          axis.text.x = element_text(hjust = 0.5, size=16), axis.ticks.x = element_blank(),
+          axis.line.x = element_blank(), axis.title.x = element_text(hjust = 0.5, size=18),
+          axis.text.y = element_text(hjust = 0.5, size=16, angle=90, vjust=-4), axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(), axis.title.y = element_text(hjust = 0.5, size=18, vjust=-4),
+          plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"))
+}
+
+ggarrange(plotlist = plots.images, ncol = 3)
+
+colnames(module.RDMs.Time) <- colnames(module_matrix)
+rownames(module.RDMs.Time) <- rownames(module_matrix)
+  
+
+#out of full matrices, we'll just use the unique correlations in lower triangle for brain-behavior RDMs
+unique.idx <- which(lower.tri(module.RDMs.Time[,,1], diag=F))
+
+```
+
+### Nearest Neighbor 
+For this first model, the distance between subjects' behavioral scores is simply abs(i-j). So, regardless of how well or poorly they did on the task, we're assuming that similar subjects should have similar patterns of time-varying connectivity.   
+```{r}
+
+#### BEHAVIOR RDM #######
+episodic.scores <- t(spread(subset(behav.data, select=-c(Priming)), SubID, Episodic))
+behav.RDM.matrix.NN <- as.matrix(dist(episodic.scores, method='euclidean')) #dist takes distance between rows (subjects' scores)
+diag(behav.RDM.matrix.NN) <- NA
+
+# catch to make sure brain RDM subject order is the same as behavior RDM subject order
+check = setdiff(colnames(behav.RDM.matrix.NN),colnames(module.RDMs.Time))
+if (!is_empty(check)) { stop('SubID order in brain RDM does not match behavior RDM')}
+
+
+# store in subject order for RDM comparison
+this.behav <- behav.RDM.matrix.NN
+
+
+## plot sorting by behavioral score for visualization
+behav.RDM.matrix.sort <- behav.RDM.matrix.NN[ord,ord]
+behav.RDM <- data.frame(behav.RDM.matrix.sort)
+colnames(behav.RDM) <- 1:nrow(behav.RDM)
+behav.RDM$Subject   <- 1:nrow(behav.RDM)
+
+p1 <- ggplot(melt(behav.RDM, "Subject"), 
+             aes(Subject, variable, fill=value, color=value)) +
+    geom_tile() +
+    scale_fill_gradientn(limits=c(0,34),
+                         colors = heat.colors(10), na.value = "gray80",
+                        guide = guide_colorbar(frame.colour = "black")) +
+    scale_color_gradientn(limits=c(0,34),
+                          colors = heat.colors(10), na.value = "gray80",
+                          guide = guide_colorbar(frame.colour = "black")) +
+    ggtitle('Nearest Neighbor') + 
+    labs(tag="c", fill="abs(i-j)", y="Subject") +
+    guides(color=FALSE) +
+    scale_x_continuous(breaks = c(14,53), labels = c("Low Memory", "High Memory")) +
+    scale_y_discrete(breaks = c(14,53), labels = c("Low Memory", "High Memory")) +
+    theme(plot.title = element_text(hjust = 0.5, size=28, margin=margin(0,0,10,0), face="plain"), 
+          axis.text.x = element_text(hjust = 0.5, size=18), axis.ticks.x = element_blank(),
+          axis.line.x = element_blank(), axis.title.x = element_text(hjust = 0.5, size=22),
+          axis.text.y = element_text(hjust = 0.5, size=18, angle=90, vjust=-4), axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(), axis.title.y = element_text(hjust = 0.5, size=22, vjust=-4),
+          plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"),
+          plot.tag = element_text(size = 38, face = "bold"),
+          legend.text = element_text(size=14), 
+          legend.title = element_text(size=18, margin = margin(0,0,5,0)),
+          legend.key.width = unit(0.5,"cm"), legend.key.height = unit(1,"cm"))
+
+```
+
+Run intersubject RSA with permutation testing:   
+
+* calculates the correlation between the brain and behavior RDM.  
+* shuffles the subject labels of the brain matrix and recomputes the correlation 10,000 times for a null distribution.  
+* p value calculated as the proportion of permutation correlations that are greater than the true correlation.  
+```{r}
+
+
+#### ---------- by Module ------------- #####
+plots.images = list()
+for (m in 1:length(modules)) {
+  # brain RDM for this module
+  this.brain <- module.RDMs.Time[,,m]
+  
+  # correlate lower triangles of brain and behavior RDMs
+  my.cor <- cor(this.brain[unique.idx],this.behav[unique.idx], method="spearman") 
+  
+  # store null distribution of brain-behav correlations
+  perm.cors <- array(NA,c(1,nIter))
+  for (i in 1:nIter) {
+    this.order     <- sample(c(1:nrow(this.brain)))
+    brain.shuffled <- this.brain[this.order,this.order]  #shuffled subj labels on brain matrix
+    perm.cors[i]   <- cor(brain.shuffled[unique.idx],this.behav[unique.idx], method="spearman")
+  }
+  perm.cors <- data.frame(t(perm.cors))
+  colnames(perm.cors) <- 'Spearman'
+  
+  
+  ### plot null (permutation cors), making actual cor
+  plots.images[[m]] <- ggplot(perm.cors, aes(x=Spearman, y=..count..)) +
+    geom_histogram(binwidth = .005, fill="gray60", color="gray60") +
+    ggtitle(modules[m]) +
+    geom_vline(xintercept = my.cor, linetype=1, size=2, color=module.colors[m]) +
+    geom_vline(xintercept = 0, linetype=2, size=1) +
+    scale_y_continuous(expand=c(0,0,.02,0)) +
+    coord_cartesian(xlim = c(-.2,.2)) +  #limits scale while ensuring no values are removed
+    theme(plot.title = element_text(hjust = 0.5, size=24, margin=margin(0,0,30,0), face="plain"), 
+          axis.line.x = element_line(color = "black", size = 1), 
+          axis.line.y = element_line(color = "black", size = 1),
+          axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), 
+          axis.title.y = element_text(size = 18,  margin=margin(0,10,0,0)), 
+          axis.title.x = element_text(size = 18, margin=margin(10,0,0,0)),
+          panel.background = element_blank(), legend.position="none",
+          plot.margin = margin(0.15, 0.15, 0.15, 0.15, "cm"))
+  
+  ### store p values and correlations (testing if > 0)
+  my.stats$Model[m] <- 'NN'
+  my.stats$Module[m] <- modules[m]
+  my.stats$r[m] <- my.cor
+  my.stats$p[m] <- sum(perm.cors$Spearman > my.cor)/nIter
+}
+  
+p2 <- ggarrange(plotlist = plots.images, ncol = 3) +
+        theme(plot.tag = element_text(size = 38, face = "bold"),
+              plot.margin = margin(0.25, 1, 0.25, 0.25, "cm")) +
+        labs(tag="e")
+
+```
+
+### 'Anna K' Model  
+Instead of assuming similar subjects have similar brains, this model tests if subjects with good memory look similar to one another in brain patterns, but subjects with low memory performance are more variable.   
+Note. this model was found to fit the data best in Finn et al. (2020).  
+```{r}
+
+#### BEHAVIOR RDM #######
+behav.RDM.matrix.AK <- array(NA,c(NSubs,NSubs))
+colnames(behav.RDM.matrix.AK) <- behav.data$SubID
+rownames(behav.RDM.matrix.AK) <- behav.data$SubID
+
+# calculate Anna K dissimilarity -- i.e. max score - (min(i,j))
+for (x in 1:NSubs) {
+  for (y in 1:NSubs) {
+    behav.RDM.matrix.AK[x,y] <- max(behav.data$Episodic) - (min(c(behav.data$Episodic[x],
+                                                                  behav.data$Episodic[y])))  
+  }
+}
+diag(behav.RDM.matrix.AK) <- NA
+
+# catch to make sure brain RDM subject order is the same as behavior RDM subject order
+check = setdiff(colnames(behav.RDM.matrix.AK),colnames(module.RDMs.Time))
+if (!is_empty(check)) { stop('SubID order in brain RDM does not match behavior RDM')}
+
+
+# store in subject order
+this.behav <- behav.RDM.matrix.AK
+
+
+## plot sorting by behavioral score
+behav.RDM.matrix.sort <- behav.RDM.matrix.AK[ord,ord]
+behav.RDM <- data.frame(behav.RDM.matrix.sort)
+colnames(behav.RDM) <- 1:nrow(behav.RDM)
+behav.RDM$Subject   <- 1:nrow(behav.RDM)
+
+p3 <- ggplot(melt(behav.RDM, "Subject"), 
+             aes(Subject, variable, fill=value, color=value)) +
+    geom_tile() +
+    scale_fill_gradientn(limits=c(0,34),
+                         colors = heat.colors(10), na.value = "gray80",
+                        guide = guide_colorbar(frame.colour = "black")) +
+    scale_color_gradientn(limits=c(0,34),
+                          colors = heat.colors(10), na.value = "gray80",
+                          guide = guide_colorbar(frame.colour = "black")) +
+    ggtitle('Anna K') + 
+    labs(tag="d", fill="max-\nmin(i,j)", y="Subject") +
+    guides(color=FALSE) +
+    scale_x_continuous(breaks = c(14,53), labels = c("Low Memory", "High Memory")) +
+    scale_y_discrete(breaks = c(14,53), labels = c("Low Memory", "High Memory")) +
+    theme(plot.title = element_text(hjust = 0.5, size=28, margin=margin(0,0,10,0), face="plain"), 
+          axis.text.x = element_text(hjust = 0.5, size=18), axis.ticks.x = element_blank(),
+          axis.line.x = element_blank(), axis.title.x = element_text(hjust = 0.5, size=22),
+          axis.text.y = element_text(hjust = 0.5, size=18, angle=90, vjust=-4), axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(), axis.title.y = element_text(hjust = 0.5, size=22, vjust=-4),
+          plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"),
+          plot.tag = element_text(size = 38, face = "bold"),
+          legend.text = element_text(size=14), 
+          legend.title = element_text(size=18, margin = margin(0,0,5,0)),
+          legend.key.width = unit(0.5,"cm"), legend.key.height = unit(1,"cm"))
+
+```
+
+Run Intersubject RSA with permutation testing:   
+```{r}
+
+#### ---------- by Module ------------- #####
+plots.images = list()
+for (m in 1:length(modules)) {
+  # brain RDM for this module
+  this.brain <- module.RDMs.Time[,,m]
+  
+  # correlate lower triangles of brain and behavior RDMs
+  my.cor <- cor(this.brain[unique.idx],this.behav[unique.idx], method="spearman") 
+  
+  # store null distribution of brain-behav correlations
+  perm.cors <- array(NA,c(1,nIter))
+  for (i in 1:nIter) {
+    this.order     <- sample(c(1:nrow(this.brain)))
+    brain.shuffled <- this.brain[this.order,this.order]  #shuffled subj labels on brain matrix
+    perm.cors[i]   <- cor(brain.shuffled[unique.idx],this.behav[unique.idx], method="spearman")
+  }
+  perm.cors <- data.frame(t(perm.cors))
+  colnames(perm.cors) <- 'Spearman'
+  
+  
+  ### plot null (permutation cors), making actual cor
+  plots.images[[m]] <- ggplot(perm.cors, aes(x=Spearman, y=..count..)) +
+    geom_histogram(binwidth = .005, fill="gray60", color="gray60") +
+    ggtitle(modules[m]) +
+    geom_vline(xintercept = my.cor, linetype=1, size=2, color=module.colors[m]) +
+    geom_vline(xintercept = 0, linetype=2, size=1) +
+    scale_y_continuous(expand=c(0,0,.02,0)) +
+    coord_cartesian(xlim = c(-.2,.2)) +  #limits scale while ensuring no values are removed
+    theme(plot.title = element_text(hjust = 0.5, size=24, margin=margin(0,0,30,0), face="plain"), 
+          axis.line.x = element_line(color = "black", size = 1), 
+          axis.line.y = element_line(color = "black", size = 1),
+          axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), 
+          axis.title.y = element_text(size = 18,  margin=margin(0,10,0,0)), 
+          axis.title.x = element_text(size = 18, margin=margin(10,0,0,0)),
+          panel.background = element_blank(), legend.position="none",
+          plot.margin = margin(0.15, 0.15, 0.15, 0.15, "cm"))
+  
+  ### store p values and correlations (testing if > 0)
+  my.stats$Model[m+3] <- 'AnnaK'
+  my.stats$Module[m+3] <- modules[m]
+  my.stats$r[m+3] <- my.cor
+  my.stats$p[m+3] <- sum(perm.cors$Spearman > my.cor)/nIter
+}
+  
+p4 <- ggarrange(plotlist = plots.images, ncol = 3) +
+        theme(plot.tag = element_text(size = 38, face = "bold"),
+              plot.margin = margin(0.25, 1, 0.25, 0.25, "cm")) +
+        labs(tag="f")
+
+```
+
+### Stats
+```{r}
+
+### show stats from all models above, adjusting for multiple comparisons
+my.stats$p.adj <- p.adjust(my.stats$p, method="bonferroni")
+kable(my.stats, caption = 'time-varying connectivity -to- episodic memory intersubject RSA stats')
+
+```
+
+### Ventral PMN High vs. Low Memory
+Based on the significant relationship beteween Ventral time-varying connectivity and episodic memory (in terms of intersubject similarity), I am visualizing the mean time-varying connectivity of the Ventral PMN subsystem for 2 groups of subjects, split (median) based on their episodic memory scores.  
+```{r}
+
+# grab event transition windows just to overlay on plot
+load("event_transitions.RData")
+my.TR = 2.47
+
+
+med.score <- median(behav.data$Episodic)
+behav.data$Group <- ''
+behav.data$Group[behav.data$Episodic < med.score] <- "Low"
+behav.data$Group[behav.data$Episodic >= med.score] <- "High"
+
+
+# assign behavioral groups to time-varying connectivity data
+TV$Group <- ''
+TV$Group[TV$Subject %in% as.character(behav.data$SubID[behav.data$Group == "Low"])] <- "Low"
+TV$Group[TV$Subject %in% as.character(behav.data$SubID[behav.data$Group == "High"])] <- "High"
+TV$Group <- as.factor(TV$Group)
+
+
+# mean Ventral connectivity by memory group
+TV.summary <- TV %>% group_by(Time,Module,Group) %>%
+  summarise(Mean = mean(Conn),
+            SE = se(Conn)) %>%
+  subset(Module == "Ventral") %>%
+  droplevels()
+
+
+# plot
+tv.plot <- ggplot(TV.summary) +
+  geom_rect(data = b.groups, aes(xmin=start*my.TR, xmax=end*my.TR, ymin=-Inf,ymax=Inf),
+            fill = 'gray90') +
+  scale_fill_manual(values = c("#0b56d9","#85aff9")) +
+  scale_color_manual(values = c("#0b56d9","#85aff9")) +
+  geom_ribbon(alpha=0.3, aes(x=Time*my.TR, fill=Group,
+                             ymin=Mean-SE, ymax=Mean+SE), color=NA) +
+  geom_line(aes(x=Time*my.TR, y=Mean, color=Group), size=1.5) +
+  scale_y_continuous(expand=c(0,0,0,0), limits=c(.15,.55)) +
+  scale_x_continuous(expand = c(0,0,0,0)) +
+  guides(fill=FALSE) +
+  labs(x="Time (seconds)", y='Mean Connectivity', tag="g", color="Memory") +
+  theme(axis.line.x = element_line(color = "black", size = 1),
+        axis.line.y = element_line(color = "black", size = 1),
+        axis.text.x = element_text(size = 18), axis.text.y = element_text(size = 18),
+        axis.title.y = element_text(size = 20), axis.title.x = element_text(size = 20),
+        panel.background = element_blank(),
+        plot.tag = element_text(size = 38, face="bold"),
+        legend.text = element_text(size=16), 
+        legend.title = element_text(size=18, margin = margin(0,0,5,0)),
+        legend.key.size = unit(2,"line"), legend.margin = margin(0,0,0,0.25, "cm"),
+        plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"))
+
+```
+
+Combine plots:  
+```{r, fig.height=17, fig.width=18}
+
+behav.plots <- ggarrange(p1, p3, nrow=2)
+permutation.plots <- ggarrange(p2, p4, tv.plot, nrow=3)
+
+myPlot <- ggarrange(behav.plots, permutation.plots, ncol=2, widths=c(1,1.75)) +  # add arrow to go from Ventral plots to TV connectivity for high vs. low memory
+            geom_segment(aes(x = 0.70, y = 0.34, xend = 0.70, yend = 0.26),
+             color ="black", size=1,
+             arrow = arrow(length = unit(0.4,"cm"),type = "closed"))
+
+
+# add analysis schematic
+analysis.plot <- ggdraw() +
+  draw_image("./methods-figs/method_5_fig.png") + 
+  labs(tag="b") +
+  theme(plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"),
+        plot.tag = element_text(size = 38, face = "bold"))
+
+top.plot <- ggarrange(meancor.plots, analysis.plot, ncol=2, widths=c(4,1))
+
+
+myPlot <- ggarrange(top.plot, myPlot, nrow=2, heights=c(1,2))
+plot(myPlot)
+
+## save
+ggsave('./joined-figs/intersubject-RSA_joined.pdf', plot = myPlot, device = "pdf", width=18, height=17, unit="in")
+
+```
+
+### Difference over time
+It appears as though the two groups (High vs. Low memory subjects) differ in terms of their change in Ventral connectivity strength over time... is this a significant difference?  
+* For each subject, I am calculating the correlation between time-varying connectivity and time, to test for a linear change. The mean correlation (fisher-z transformed) across subjects is tested against 0.
+```{r}
+
+# mean Ventral connectivity by memory group
+TV.summary <- TV %>% group_by(Subject,Module,Group) %>%
+  summarise(Z = fisherz(cor(Conn,Time))) %>%
+  subset(Module == "Ventral") %>%
+  droplevels()
+
+# t.test against zero
+ts <- data.frame(TV.summary) %>%
+         group_by(Group) %>%
+            rstatix::t_test(Z ~ 1, mu=0,
+                            p.adjust.method = "none",
+                            detailed=T)
+kable(ts, format = "pandoc",
+      caption = "One sample t-test, mean within-subject correlation between Ventral time-varying connectivity and time")
+
+# difference between groups?
+ts <- data.frame(TV.summary) %>%
+            rstatix::t_test(
+                Z ~ Group, 
+                detailed=T)
+kable(ts, format = "pandoc",
+      caption = "Independent sample t-test between memory groups")
+
+```
+
+### Other subsystems High vs. Low 
+Plots for High vs. Low memory subjects for Core and Ventral-to-Core time-varying connectivity. No visible difference between subjects, in line with the non-significant relationship between intersubject similarity of time-varying connectivity and intersubject similarity of episodic memory.  
+```{r, fig.height=7, fig.width=11}
+
+### Core ###
+TV.summary <- TV %>% group_by(Time,Module,Group) %>%
+  summarise(Mean = mean(Conn),
+            SE = se(Conn)) %>%
+  subset(Module == "Core") %>%
+  droplevels()
+
+# plot
+core.plot <- ggplot(TV.summary) +
+  geom_rect(data = b.groups, aes(xmin=start*my.TR, xmax=end*my.TR, ymin=-Inf,ymax=Inf),
+            fill = 'gray90') +
+  scale_fill_manual(values = c("#edc004","#fde78c")) +
+  scale_color_manual(values = c("#edc004","#fde78c")) +
+  geom_ribbon(alpha=0.3, aes(x=Time*my.TR, fill=Group,
+                             ymin=Mean-SE, ymax=Mean+SE), color=NA) +
+  geom_line(aes(x=Time*my.TR, y=Mean, color=Group), size=1.5) +
+  scale_y_continuous(expand=c(0,0,0,0), limits=c(.05,.55)) +
+  scale_x_continuous(expand = c(0,0,0,0)) +
+  guides(fill=FALSE) +
+  ggtitle("Core: High vs. Low Memory") +
+  labs(x="Time (seconds)", y='Mean Connectivity', color="Memory") +
+  theme(plot.title = element_text(hjust = 0.5, size=24, margin=margin(0,0,30,0), face="plain"), 
+        axis.line.x = element_line(color = "black", size = 1),
+        axis.line.y = element_line(color = "black", size = 1),
+        axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16),
+        axis.title.y = element_text(size = 18), axis.title.x = element_text(size = 18),
+        panel.background = element_blank(),
+        legend.text = element_text(size=14), 
+        legend.title = element_text(size=16, margin = margin(0,0,5,0)),
+        legend.key.size = unit(2,"line"), legend.margin = margin(0,0,0,0.25, "cm"),
+        plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"))
+
+
+### Ventral-to-Core ###
+TV.summary <- TV %>% group_by(Time,Module,Group) %>%
+  summarise(Mean = mean(Conn),
+            SE = se(Conn)) %>%
+  subset(Module == "Ventral-Core") %>%
+  droplevels()
+
+
+# plot
+cv.plot <- ggplot(TV.summary) +
+  geom_rect(data = b.groups, aes(xmin=start*my.TR, xmax=end*my.TR, ymin=-Inf,ymax=Inf),
+            fill = 'gray90') +
+  scale_fill_manual(values = c("#44dbf2","#bcf2fa")) +
+  scale_color_manual(values = c("#44dbf2","#bcf2fa")) +
+  geom_ribbon(alpha=0.3, aes(x=Time*my.TR, fill=Group,
+                             ymin=Mean-SE, ymax=Mean+SE), color=NA) +
+  geom_line(aes(x=Time*my.TR, y=Mean, color=Group), size=1.5) +
+  scale_y_continuous(expand=c(0,0,0,0), limits=c(.05,.55)) +
+  scale_x_continuous(expand = c(0,0,0,0)) +
+  guides(fill=FALSE) +
+  ggtitle("Ventral-Core: High vs. Low Memory") +
+  labs(x="Time (seconds)", y='Mean Connectivity', color="Memory") +
+  theme(plot.title = element_text(hjust = 0.5, size=24, margin=margin(0,0,30,0), face="plain"), 
+        axis.line.x = element_line(color = "black", size = 1),
+        axis.line.y = element_line(color = "black", size = 1),
+        axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16),
+        axis.title.y = element_text(size = 18), axis.title.x = element_text(size = 18),
+        panel.background = element_blank(),
+        legend.text = element_text(size=14), 
+        legend.title = element_text(size=16, margin = margin(0,0,5,0)),
+        legend.key.size = unit(2,"line"), legend.margin = margin(0,0,0,0.25, "cm"),
+        plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"))
+
+ggarrange(core.plot, cv.plot, nrow=2)
+      
+```
+
+## Control Analysis: Activity  
+As a control analysis, I'm testing whether a relationship between the PMN subsystems and episodic memory exists when considering time-varying *activity* rather than connectivity.   
+
+### Time-Varying Activity RDMs  
+
+* Intersubject dissimilarity (1 - pearson correlation) of mean subsystem activity time-series.  
+* Sorted by behavioral score for visualization.    
+```{r, fig.width=12, fig.height=4.75}
+
+#### initiate stats data frame for NN and Anna K models
+my.stats <- data.frame(array(0,c(4,4)))
+colnames(my.stats) <- c('Model','Module','r','p')
+
+
+ord <- episodic.ord
+
+### load in activity time series
+allData.1 = read.csv('./Discovery/PM_node_timeseries_Discovery.csv', header = TRUE)
+allData.2 = read.csv('./Replication/PM_node_timeseries_Replication.csv', header = TRUE)
+allData <- rbind(allData.1, allData.2)
+
+#filter by subjects who have behavioral data and match order to behavioral data
+sub.idx <- allData$Subject %in% behav.data$SubID
+allData <- allData[sub.idx,]
+allData <- allData[order(as.character(allData$Subject)),]
+allData$Subject=factor(allData$Subject, levels=as.character(behav.data$SubID))
+
+
+# add Module information
+allData$Module <- ''
+allData$Module[allData$Node == "PHC" | allData$Node == "RSC" | allData$Node == "pAG"] <- "Ventral"
+allData$Module[allData$Node == "Hipp" | allData$Node == "MPFC" | allData$Node == "PCC" |
+               allData$Node == "Prec" | allData$Node == "aAG"] <- "Core"
+
+allData$Module=as.factor(allData$Module)
+
+
+# average activity by module
+module.activity <- allData %>% group_by(Subject, Time, Module) %>%
+                       summarise(Activity = mean(Value))
+
+
+
+### calculate subjxsubj correlation matrices for time-varying activity
+activity.RDMs.Time <- array(0,c(NSubs,NSubs,2))
+
+plots.images = list()
+for (m in 1:2) {
+  module_data <- subset(module.activity, Module == modules[m]) %>%
+                    spread(Subject, Activity) %>%
+                    droplevels()
+  
+  # which columns are subjects?
+  subcols <- grep('sub-',colnames(module_data))
+  
+  # correlate subject time series, taking **dissimilarity (1- pearson correlation)**
+  module_matrix <- 1 - cor(module_data[,subcols])
+  diag(module_matrix) <- NA
+  
+  # catch to make sure subID col names are in same order as behavData subIDs
+  check = setdiff(as.character(behav.data$SubID),colnames(module_matrix))
+  if (!is_empty(check)) { stop('SubID order in brain RDM does not match behavioral data')}
+  
+  
+  ## store (in behav subject order)
+  activity.RDMs.Time[,,m] <- module_matrix
+  
+  
+  #sort by behavioral score for visualization
+  module.matrix.sort <- data.frame(module_matrix[ord,ord])
+  colnames(module.matrix.sort) <- 1:nrow(module.matrix.sort)
+  module.matrix.sort$Subject   <- 1:nrow(module.matrix.sort)
+    
+  plots.images[[m]] <- ggplot(melt(module.matrix.sort,"Subject"), 
+                              aes(Subject, variable, fill=value)) +
+    geom_tile() +
+    scale_fill_gradientn(colors = heat.colors(10), na.value = "gray80",
+                         guide = guide_colorbar(frame.colour = "black"),
+                         limits=c(0,1.5)) +
+    ggtitle(modules[m]) +  labs(fill="Dissimilarity", y="Subject") +
+    scale_x_continuous(breaks = c(12,55), labels = c("Low Memory", "High Memory")) +
+    scale_y_discrete(breaks = c(12,55), labels = c("Low Memory", "High Memory")) +
+    theme(plot.title = element_text(hjust = 0.5, size=26, margin=margin(0,0,10,0), face="plain"), 
+          axis.text.x = element_text(hjust = 0.5, size=16), axis.ticks.x = element_blank(),
+          axis.line.x = element_blank(), axis.title.x = element_text(hjust = 0.5, size=18),
+          axis.text.y = element_text(hjust = 0.5, size=16, angle=90, vjust=-4), axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(), axis.title.y = element_text(hjust = 0.5, size=18, vjust=-4),
+          plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"))
+}
+
+ggarrange(plotlist = plots.images, ncol = 2)
+
+colnames(activity.RDMs.Time) <- colnames(module_matrix)
+rownames(activity.RDMs.Time) <- rownames(module_matrix)
+
+```
+
+### Nearest Neighbor   
+```{r}
+
+# catch to make sure brain RDM subject order is the same as behavior RDM subject order
+check = setdiff(colnames(behav.RDM.matrix.NN),colnames(activity.RDMs.Time))
+if (!is_empty(check)) { stop('SubID order in brain RDM does not match behavior RDM')}
+
+this.behav <- behav.RDM.matrix.NN
+
+
+#### ---------- by Module ------------- #####
+plots.images = list()
+for (m in 1:2) {
+  # brain RDM for this module
+  this.brain <- activity.RDMs.Time[,,m]
+  
+  # correlate lower triangles of brain and behavior RDMs
+  my.cor <- cor(this.brain[unique.idx],this.behav[unique.idx], method="spearman") 
+  
+  # store null distribution of brain-behav correlations
+  perm.cors <- array(NA,c(1,nIter))
+  for (i in 1:nIter) {
+    this.order     <- sample(c(1:nrow(this.brain)))
+    brain.shuffled <- this.brain[this.order,this.order]  #shuffled subj labels on brain matrix
+    perm.cors[i]   <- cor(brain.shuffled[unique.idx],this.behav[unique.idx], method="spearman")
+  }
+  perm.cors <- data.frame(t(perm.cors))
+  colnames(perm.cors) <- 'Spearman'
+  
+  
+  ### plot null (permutation cors), making actual cor
+  plots.images[[m]] <- ggplot(perm.cors, aes(x=Spearman, y=..count..)) +
+    geom_histogram(binwidth = .005, fill="gray60", color="gray60") +
+    ggtitle(modules[m]) +
+    geom_vline(xintercept = my.cor, linetype=1, size=2, color=module.colors[m]) +
+    geom_vline(xintercept = 0, linetype=2, size=1) +
+    scale_y_continuous(expand=c(0,0,.02,0)) +
+    coord_cartesian(xlim = c(-.3,.3)) +
+    theme(plot.title = element_text(hjust = 0.5, size=24, margin=margin(0,0,30,0), face="plain"), 
+          axis.line.x = element_line(color = "black", size = 1), 
+          axis.line.y = element_line(color = "black", size = 1),
+          axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), 
+          axis.title.y = element_text(size = 18,  margin=margin(0,10,0,0)), 
+          axis.title.x = element_text(size = 16, margin=margin(10,0,0,0)),
+          panel.background = element_blank(), legend.position="none",
+          plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"))
+  
+  ### store p values and correlations (testing if > 0)
+  my.stats$Model[m] <- 'NN'
+  my.stats$Module[m] <- modules[m]
+  my.stats$r[m] <- my.cor
+  my.stats$p[m] <- sum(perm.cors$Spearman > my.cor)/nIter
+}
+
+
+p1 <- ggarrange(plotlist = plots.images, ncol = 2) +
+            ggtitle("Nearest Neighbor") +
+            theme(plot.title = element_text(hjust = 0.5, size=26, 
+                                            margin=margin(0,0,10,0), face="plain"),
+                  plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"))
+
+```
+
+### 'Anna K' Model  
+```{r}
+
+# catch to make sure brain RDM subject order is the same as behavior RDM subject order
+check = setdiff(colnames(behav.RDM.matrix.AK),colnames(activity.RDMs.Time))
+if (!is_empty(check)) { stop('SubID order in brain RDM does not match behavior RDM')}
+
+this.behav <- behav.RDM.matrix.AK
+
+
+#### ---------- by Module ------------- #####
+plots.images = list()
+for (m in 1:2) {
+  # brain RDM for this module
+  this.brain <- activity.RDMs.Time[,,m]
+  
+  # correlate lower triangles of brain and behavior RDMs
+  my.cor <- cor(this.brain[unique.idx],this.behav[unique.idx], method="spearman") 
+  
+  # store null distribution of brain-behav correlations
+  perm.cors <- array(NA,c(1,nIter))
+  for (i in 1:nIter) {
+    this.order     <- sample(c(1:nrow(this.brain)))
+    brain.shuffled <- this.brain[this.order,this.order]  #shuffled subj labels on brain matrix
+    perm.cors[i]   <- cor(brain.shuffled[unique.idx],this.behav[unique.idx], method="spearman")
+  }
+  perm.cors <- data.frame(t(perm.cors))
+  colnames(perm.cors) <- 'Spearman'
+  
+  
+  ### plot null (permutation cors), making actual cor
+  plots.images[[m]] <- ggplot(perm.cors, aes(x=Spearman, y=..count..)) +
+    geom_histogram(binwidth = .005, fill="gray60", color="gray60") +
+    ggtitle(modules[m]) +
+    geom_vline(xintercept = my.cor, linetype=1, size=2, color=module.colors[m]) +
+    geom_vline(xintercept = 0, linetype=2, size=1) +
+    scale_y_continuous(expand=c(0,0,.02,0)) +
+    coord_cartesian(xlim = c(-.3,.3)) +
+    theme(plot.title = element_text(hjust = 0.5, size=24, margin=margin(0,0,30,0), face="plain"), 
+          axis.line.x = element_line(color = "black", size = 1), 
+          axis.line.y = element_line(color = "black", size = 1),
+          axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), 
+          axis.title.y = element_text(size = 18,  margin=margin(0,10,0,0)), 
+          axis.title.x = element_text(size = 16, margin=margin(10,0,0,0)),
+          panel.background = element_blank(), legend.position="none",
+          plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"))
+  
+  ### store p values and correlations (testing if > 0)
+  my.stats$Model[m+2] <- 'AnnaK'
+  my.stats$Module[m+2] <- modules[m]
+  my.stats$r[m+2] <- my.cor
+  my.stats$p[m+2] <- sum(perm.cors$Spearman > my.cor)/nIter
+}
+
+
+p2 <- ggarrange(plotlist = plots.images, ncol = 2) +
+            ggtitle("Anna K") +
+            theme(plot.title = element_text(hjust = 0.5, size=26, 
+                                            margin=margin(0,0,10,0), face="plain"),
+                  plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"))
+
+```
+
+### Stats
+```{r}
+
+### show stats from all models above, adjusting for multiple comparisons
+my.stats$p.adj <- p.adjust(my.stats$p, method="bonferroni")
+kable(my.stats, caption = 'time-varying activity -to- episodic memory intersubject RSA stats')
+
+```
+
+Plot:  
+```{r, fig.height=5, fig.width=15}
+
+myPlot <- ggarrange(p1, p2, ncol = 2)
+plot(myPlot)
+
+```
+
+## Control Analysis: Priming   
+As a control analysis, I'm testing if the relationship between PMN time-varying connectivity and memory is selective to *episodic* memory by using an separate measure from the same task -- priming.  
+
+* Priming score = accuracy at identifying degraded objects that were studied.  
+
+### Nearest Neighbor  
+```{r}
+
+#### initiate stats data frame for NN and Anna K models
+my.stats <- data.frame(array(0,c(length(modules)*2,4)))
+colnames(my.stats) <- c('Model','Module','r','p')
+
+
+ord <- priming.ord
+
+#### BEHAVIOR RDM #######
+priming.scores <- t(spread(subset(behav.data, select=-c(Episodic,Group)), SubID, Priming))
+behav.RDM.matrix.NN <- as.matrix(dist(priming.scores, method='euclidean')) #dist takes distance between rows (subjects' scores)
+diag(behav.RDM.matrix.NN) <- NA
+
+# catch to make sure brain RDM subject order is the same as behavior RDM subject order
+check = setdiff(colnames(behav.RDM.matrix.NN),colnames(module.RDMs.Time))
+if (!is_empty(check)) { stop('SubID order in brain RDM does not match behavior RDM')}
+
+
+# store in subject order for RDM comparison
+this.behav <- behav.RDM.matrix.NN
+
+
+## plot sorting by behavioral score for visualization
+behav.RDM.matrix.sort <- behav.RDM.matrix.NN[ord,ord]
+behav.RDM <- data.frame(behav.RDM.matrix.sort)
+colnames(behav.RDM) <- 1:nrow(behav.RDM)
+behav.RDM$Subject   <- 1:nrow(behav.RDM)
+
+p1 <- ggplot(melt(behav.RDM, "Subject"), 
+             aes(Subject, variable, fill=value, color=value)) +
+    geom_tile() +
+    scale_fill_gradientn(limits=c(0,.5),
+                         colors = heat.colors(10), na.value = "gray80",
+                        guide = guide_colorbar(frame.colour = "black")) +
+    scale_color_gradientn(limits=c(0,.5),
+                          colors = heat.colors(10), na.value = "gray80",
+                          guide = guide_colorbar(frame.colour = "black")) +
+    ggtitle('Nearest Neighbor') + 
+    labs(tag="a", fill="abs(i-j)", y="Subject") +
+    guides(color=FALSE) +
+    scale_x_continuous(breaks = c(12,55), labels = c("Low Memory", "High Memory")) +
+    scale_y_discrete(breaks = c(12,55), labels = c("Low Memory", "High Memory")) +
+    theme(plot.title = element_text(hjust = 0.5, size=26, margin=margin(0,0,10,0), face="plain"), 
+          axis.text.x = element_text(hjust = 0.5, size=16), axis.ticks.x = element_blank(),
+          axis.line.x = element_blank(), axis.title.x = element_text(hjust = 0.5, size=18),
+          axis.text.y = element_text(hjust = 0.5, size=16, angle=90, vjust=-4), axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(), axis.title.y = element_text(hjust = 0.5, size=18, vjust=-4),
+          plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"),
+          plot.tag = element_text(size = 32, face = "bold"),
+          legend.text = element_text(size=14), 
+          legend.title = element_text(size=18, margin = margin(0,0,5,0)),
+          legend.key.width = unit(0.5,"cm"), legend.key.height = unit(1,"cm"))
+
+```
+
+```{r}
+
+#### ---------- by Module ------------- #####
+plots.images = list()
+for (m in 1:length(modules)) {
+  # brain RDM for this module
+  this.brain <- module.RDMs.Time[,,m]
+  
+  # correlate lower triangles of brain and behavior RDMs
+  my.cor <- cor(this.brain[unique.idx],this.behav[unique.idx], method="spearman") 
+  
+  # store null distribution of brain-behav correlations
+  perm.cors <- array(NA,c(1,nIter))
+  for (i in 1:nIter) {
+    this.order     <- sample(c(1:nrow(this.brain)))
+    brain.shuffled <- this.brain[this.order,this.order]  #shuffled subj labels on brain matrix
+    perm.cors[i]   <- cor(brain.shuffled[unique.idx],this.behav[unique.idx], method="spearman")
+  }
+  perm.cors <- data.frame(t(perm.cors))
+  colnames(perm.cors) <- 'Spearman'
+  
+  
+  ### plot null (permutation cors), making actual cor
+  plots.images[[m]] <- ggplot(perm.cors, aes(x=Spearman, y=..count..)) +
+    geom_histogram(binwidth = .005, fill="gray60", color="gray60") +
+    ggtitle(modules[m]) +
+    geom_vline(xintercept = my.cor, linetype=1, size=2, color=module.colors[m]) +
+    geom_vline(xintercept = 0, linetype=2, size=1) +
+    scale_y_continuous(expand=c(0,0,.02,0)) +
+    coord_cartesian(xlim = c(-.2,.2)) +  #limits scale while ensuring no values are removed
+    theme(plot.title = element_text(hjust = 0.5, size=24, margin=margin(0,0,30,0), face="plain"), 
+          axis.line.x = element_line(color = "black", size = 1), 
+          axis.line.y = element_line(color = "black", size = 1),
+          axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), 
+          axis.title.y = element_text(size = 18,  margin=margin(0,10,0,0)), 
+          axis.title.x = element_text(size = 18, margin=margin(10,0,0,0)),
+          panel.background = element_blank(), legend.position="none",
+          plot.margin = margin(0.15, 0.15, 0.15, 0.15, "cm"))
+  
+  ### store p values and correlations (testing if > 0)
+  my.stats$Model[m] <- 'NN'
+  my.stats$Module[m] <- modules[m]
+  my.stats$r[m] <- my.cor
+  my.stats$p[m] <- sum(perm.cors$Spearman > my.cor)/nIter
+}
+
+
+p2 <- ggarrange(plotlist = plots.images, ncol = 3) +
+        theme(plot.tag = element_text(size = 32, face = "bold"),
+              plot.margin = margin(2, 0.25, 1, 0.25, "cm")) +
+        labs(tag="c")
+
+```
+
+### 'Anna K' Model   
+```{r}
+
+#### BEHAVIOR RDM #######
+behav.RDM.matrix.AK <- array(NA,c(NSubs,NSubs))
+colnames(behav.RDM.matrix.AK) <- behav.data$SubID
+rownames(behav.RDM.matrix.AK) <- behav.data$SubID
+
+# calculate Anna K dissimilarity -- i.e. max score - (min(i,j))
+for (x in 1:NSubs) {
+  for (y in 1:NSubs) {
+    behav.RDM.matrix.AK[x,y] <- max(behav.data$Priming) - (min(c(behav.data$Priming[x],
+                                                                 behav.data$Priming[y])))  
+  }
+}
+diag(behav.RDM.matrix.AK) <- NA
+
+# catch to make sure brain RDM subject order is the same as behavior RDM subject order
+check = setdiff(colnames(behav.RDM.matrix.AK),colnames(module.RDMs.Time))
+if (!is_empty(check)) { stop('SubID order in brain RDM does not match behavior RDM')}
+
+
+# store in subject order
+this.behav <- behav.RDM.matrix.AK
+
+
+## plot sorting by behavioral score
+behav.RDM.matrix.sort <- behav.RDM.matrix.AK[ord,ord]
+behav.RDM <- data.frame(behav.RDM.matrix.sort)
+colnames(behav.RDM) <- 1:nrow(behav.RDM)
+behav.RDM$Subject   <- 1:nrow(behav.RDM)
+
+p3 <- ggplot(melt(behav.RDM, "Subject"), 
+             aes(Subject, variable, fill=value, color=value)) +
+    geom_tile() +
+    scale_fill_gradientn(limits=c(0,.5),
+                         colors = heat.colors(10), na.value = "gray80",
+                         guide = guide_colorbar(frame.colour = "black")) +
+    scale_color_gradientn(limits=c(0,.5),
+                          colors = heat.colors(10), na.value = "gray80",
+                          guide = guide_colorbar(frame.colour = "black")) +
+    ggtitle('Anna K') + 
+    labs(tag="b", fill="max-\nmin(i,j)", y="Subject") +
+    guides(color=FALSE) +
+    scale_x_continuous(breaks = c(12,55), labels = c("Low Memory", "High Memory")) +
+    scale_y_discrete(breaks = c(12,55), labels = c("Low Memory", "High Memory")) +
+    theme(plot.title = element_text(hjust = 0.5, size=26, margin=margin(0,0,10,0), face="plain"), 
+          axis.text.x = element_text(hjust = 0.5, size=16), axis.ticks.x = element_blank(),
+          axis.line.x = element_blank(), axis.title.x = element_text(hjust = 0.5, size=18),
+          axis.text.y = element_text(hjust = 0.5, size=16, angle=90, vjust=-4), axis.ticks.y = element_blank(),
+          axis.line.y = element_blank(), axis.title.y = element_text(hjust = 0.5, size=18, vjust=-4),
+          plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"),
+          plot.tag = element_text(size = 32, face = "bold"),
+          legend.text = element_text(size=14), 
+          legend.title = element_text(size=18, margin = margin(0,0,5,0)),
+          legend.key.width = unit(0.5,"cm"), legend.key.height = unit(1,"cm"))
+
+```
+
+```{r}
+
+#### ---------- by Module ------------- #####
+plots.images = list()
+for (m in 1:length(modules)) {
+  # brain RDM for this module
+  this.brain <- module.RDMs.Time[,,m]
+  
+  # correlate lower triangles of brain and behavior RDMs
+  my.cor <- cor(this.brain[unique.idx],this.behav[unique.idx], method="spearman") 
+  
+  # store null distribution of brain-behav correlations
+  perm.cors <- array(NA,c(1,nIter))
+  for (i in 1:nIter) {
+    this.order     <- sample(c(1:nrow(this.brain)))
+    brain.shuffled <- this.brain[this.order,this.order]  #shuffled subj labels on brain matrix
+    perm.cors[i]   <- cor(brain.shuffled[unique.idx],this.behav[unique.idx], method="spearman")
+  }
+  perm.cors <- data.frame(t(perm.cors))
+  colnames(perm.cors) <- 'Spearman'
+  
+  
+  ### plot null (permutation cors), making actual cor
+  plots.images[[m]] <- ggplot(perm.cors, aes(x=Spearman, y=..count..)) +
+    geom_histogram(binwidth = .005, fill="gray60", color="gray60") +
+    ggtitle(modules[m]) +
+    geom_vline(xintercept = my.cor, linetype=1, size=2, color=module.colors[m]) +
+    geom_vline(xintercept = 0, linetype=2, size=1) +
+    scale_y_continuous(expand=c(0,0,.02,0)) +
+    coord_cartesian(xlim = c(-.2,.2)) +  #limits scale while ensuring no values are removed
+    theme(plot.title = element_text(hjust = 0.5, size=24, margin=margin(0,0,30,0), face="plain"), 
+          axis.line.x = element_line(color = "black", size = 1), 
+          axis.line.y = element_line(color = "black", size = 1),
+          axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16), 
+          axis.title.y = element_text(size = 18,  margin=margin(0,10,0,0)), 
+          axis.title.x = element_text(size = 18, margin=margin(10,0,0,0)),
+          panel.background = element_blank(), legend.position="none",
+          plot.margin = margin(0.15, 0.15, 0.15, 0.15, "cm"))
+  
+  ### store p values and correlations (testing if > 0)
+  my.stats$Model[m+3] <- 'AnnaK'
+  my.stats$Module[m+3] <- modules[m]
+  my.stats$r[m+3] <- my.cor
+  my.stats$p[m+3] <- sum(perm.cors$Spearman > my.cor)/nIter
+}
+  
+p4 <- ggarrange(plotlist = plots.images, ncol = 3) +
+        theme(plot.tag = element_text(size = 32, face = "bold"),
+              plot.margin = margin(2, 0.25, 1, 0.25, "cm")) +
+        labs(tag="d")
+
+```
+
+### Stats
+```{r}
+
+### show stats from all models above, adjusting for multiple comparisons
+my.stats$p.adj <- p.adjust(my.stats$p, method="bonferroni")
+kable(my.stats, caption = 'time-varying connectivity -to- priming intersubject RSA stats')
+
+```
+
+Plot:  
+```{r, fig.height=10, fig.width=18}
+
+behav.plots <- ggarrange(p1, p3, nrow=2)
+permutation.plots <- ggarrange(p2, p4, nrow=2)
+
+myPlot <- ggarrange(behav.plots, permutation.plots, ncol=2, widths=c(1.5,3))
+plot(myPlot)
+
+```
