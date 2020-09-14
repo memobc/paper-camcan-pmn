@@ -42,7 +42,7 @@ se <- function(x) sqrt(var(x)/length(x))  #function to calculate SE
 ci <- function(x) (sqrt(var(x)/length(x))) * 1.96  #function to calculate 95% CI
 
 ## colors of PMN subsystems
-module.colors <- c("#fcd841","#3c7ff5","#8ce9f7")  #for "Core", "Ventral", "Ventral-Core"
+module.colors <- c("#fcd841","#3c7ff5","#8ce9f7")  #for "Dorsal", "Ventral", "Ventral-Dorsal"
 heat.colors  <- colorRampPalette(c("#009FFF","white","#ff5858"))
 
 
@@ -198,7 +198,7 @@ meancor.plots <- ggarrange(plotlist = plots, ncol=3) +
 ```
 
 # Time-varying PMN connectivity
-Now, I am loading in the time-varying connectivity vectors generated within CamCan-PM-network_[Discovery/Replication].Rmd, which reflect the mean connectivity within the Ventral and Core subsystems, and between them, per subject and time point.  
+Now, I am loading in the time-varying connectivity vectors generated within CamCan-PM-network_[Discovery/Replication].Rmd, which reflect the mean connectivity within the Ventral and Dorsal subsystems, and between them, per subject and time point.  
 ```{r}
 
 # grab time series from both groups
@@ -647,14 +647,14 @@ kable(ts, format = "pandoc",
 ```
 
 ### Other subsystems High vs. Low 
-Plots for High vs. Low memory subjects for Core and Ventral-to-Core time-varying connectivity. No visible difference between subjects, in line with the non-significant relationship between intersubject similarity of time-varying connectivity and intersubject similarity of episodic memory.  
+Plots for High vs. Low memory subjects for Dorsal and Ventral-to-Dorsal time-varying connectivity. No visible difference between subjects, in line with the non-significant relationship between intersubject similarity of time-varying connectivity and intersubject similarity of episodic memory.  
 ```{r, fig.height=7, fig.width=11}
 
-### Core ###
+### Dorsal ###
 TV.summary <- TV %>% group_by(Time,Module,Group) %>%
   summarise(Mean = mean(Conn),
             SE = se(Conn)) %>%
-  subset(Module == "Core") %>%
+  subset(Module == "Dorsal") %>%
   droplevels()
 
 # plot
@@ -669,7 +669,7 @@ core.plot <- ggplot(TV.summary) +
   scale_y_continuous(expand=c(0,0,0,0), limits=c(.05,.55)) +
   scale_x_continuous(expand = c(0,0,0,0)) +
   guides(fill=FALSE) +
-  ggtitle("Core: High vs. Low Memory") +
+  ggtitle("Dorsal: High vs. Low Memory") +
   labs(x="Time (seconds)", y='Mean Connectivity', color="Memory") +
   theme(plot.title = element_text(hjust = 0.5, size=24, margin=margin(0,0,30,0), face="plain"), 
         axis.line.x = element_line(color = "black", size = 1),
@@ -683,11 +683,11 @@ core.plot <- ggplot(TV.summary) +
         plot.margin = margin(0.25, 0.25, 0.25, 0.25, "cm"))
 
 
-### Ventral-to-Core ###
+### Ventral-to-Dorsal ###
 TV.summary <- TV %>% group_by(Time,Module,Group) %>%
   summarise(Mean = mean(Conn),
             SE = se(Conn)) %>%
-  subset(Module == "Ventral-Core") %>%
+  subset(Module == "Ventral-Dorsal") %>%
   droplevels()
 
 
@@ -703,7 +703,7 @@ cv.plot <- ggplot(TV.summary) +
   scale_y_continuous(expand=c(0,0,0,0), limits=c(.05,.55)) +
   scale_x_continuous(expand = c(0,0,0,0)) +
   guides(fill=FALSE) +
-  ggtitle("Ventral-Core: High vs. Low Memory") +
+  ggtitle("Ventral-Dorsal: High vs. Low Memory") +
   labs(x="Time (seconds)", y='Mean Connectivity', color="Memory") +
   theme(plot.title = element_text(hjust = 0.5, size=24, margin=margin(0,0,30,0), face="plain"), 
         axis.line.x = element_line(color = "black", size = 1),
@@ -752,7 +752,7 @@ allData$Subject=factor(allData$Subject, levels=as.character(behav.data$SubID))
 allData$Module <- ''
 allData$Module[allData$Node == "PHC" | allData$Node == "RSC" | allData$Node == "pAG"] <- "Ventral"
 allData$Module[allData$Node == "Hipp" | allData$Node == "MPFC" | allData$Node == "PCC" |
-               allData$Node == "Prec" | allData$Node == "aAG"] <- "Core"
+               allData$Node == "Prec" | allData$Node == "aAG"] <- "Dorsal"
 
 allData$Module=as.factor(allData$Module)
 

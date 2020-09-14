@@ -70,7 +70,7 @@ ci <- function(x) (sqrt(var(x)/length(x))) * 1.96  #function to calculate 95% CI
 ### color palettes:
 # color my 8 nodes
 mycolors = c('#f2a68c','#934be0','#929292','#e6664d','#8ce9f7','#3c7ff5','#fcd841','#95df3a')
-module.colors <- c("#fcd841","#3c7ff5","#8ce9f7")  #for "Core", "Ventral", "Ventral-to-Core"
+module.colors <- c("#fcd841","#3c7ff5","#8ce9f7")  #for "Dorsal PM", "Ventral PM", "Ventral PM-to-Dorsal PM"
 
 # color scales
 gray.colors  <- colorRampPalette(c("gray90","gray10"))
@@ -391,8 +391,8 @@ for (n in 1:n.mod) {
 
 # add images showing overlap of connections by submodule
 p3 <- ggdraw() +
-  draw_image(paste('./',this.group,'/wholebrain/group-average/task-movie_quantile_',th_WB,'_sum_Core.png',sep="")) + 
-  ggtitle('"Core": 20% density') + labs(tag="d") +
+  draw_image(paste('./',this.group,'/wholebrain/group-average/task-movie_quantile_',th_WB,'_sum_Dorsal.png',sep="")) + 
+  ggtitle('"Dorsal PM": 20% density') + labs(tag="d") +
   geom_label(aes(x=0.5, y=0.065, label="Connected Regions"), 
              size=4.5, color="black", fill="white", label.size=0) +
   geom_label(aes(x=0.5, y=0.115, label="0                        5"), 
@@ -403,7 +403,7 @@ p3 <- ggdraw() +
 
 p4 <- ggdraw() +
   draw_image(paste('./',this.group,'/wholebrain/group-average/task-movie_quantile_',th_WB,'_sum_Ventral.png',sep="")) + 
-  ggtitle('"Ventral": 20% density') + labs(tag="e") +
+  ggtitle('"Ventral PM": 20% density') + labs(tag="e") +
   geom_label(aes(x=0.5, y=0.065, label="Connected Regions"), 
              size=4.5, color="black", fill="white", label.size=0) +
   geom_label(aes(x=0.5, y=0.115, label="0                        3"), 
@@ -443,7 +443,7 @@ ggsave(paste('./',this.group,'/figures/seed-to-voxel_',this.group,'.pdf',sep="")
 
 ```
 
-From now on, ROIs are sorted into the above modules -- 'Ventral' and 'Core'.   
+From now on, ROIs are sorted into the above modules -- 'Ventral PM' and 'Dorsal PM'.   
 
 # Intranetwork connectivity
 Bivariate network = Pearson's correlation between the time-series of PMM regions, per subject.  
@@ -490,10 +490,10 @@ Average connectivity within and between PMN subsystems:
 data.mod <- melt(node.bivariate)  #Var3 = Subject index
 data.mod <- data.mod[data.mod$value != 0,] # remove diagonal
 data.mod$Module = ''
-data.mod$Module[data.mod$Var1 %in% rois[my.modules==1] & data.mod$Var2 %in% rois[my.modules==1]] <- 'Core'
+data.mod$Module[data.mod$Var1 %in% rois[my.modules==1] & data.mod$Var2 %in% rois[my.modules==1]] <- 'Dorsal'
 data.mod$Module[data.mod$Var1 %in% rois[my.modules==2] & data.mod$Var2 %in% rois[my.modules==2]] <- 'Ventral'
 data.mod$Module[(data.mod$Var1 %in% rois[my.modules==1] & data.mod$Var2 %in% rois[my.modules==2]) |
-                (data.mod$Var1 %in% rois[my.modules==2] & data.mod$Var2 %in% rois[my.modules==1])] <- 'Ventral-Core'
+                (data.mod$Var1 %in% rois[my.modules==2] & data.mod$Var2 %in% rois[my.modules==1])] <- 'Ventral-Dorsal'
 
 
 # within-subject mean module connectivity (fisher z transformed)
@@ -559,10 +559,10 @@ save(data.summary.subject, file=timeaveraged.file)
 data.mod <- melt(node.partial)  #Var3 = Subject index
 data.mod <- data.mod[data.mod$value != 0,] # remove diagonal
 data.mod$Module = ''
-data.mod$Module[data.mod$Var1 %in% rois[my.modules==1] & data.mod$Var2 %in% rois[my.modules==1]] <- 'Core'
+data.mod$Module[data.mod$Var1 %in% rois[my.modules==1] & data.mod$Var2 %in% rois[my.modules==1]] <- 'Dorsal'
 data.mod$Module[data.mod$Var1 %in% rois[my.modules==2] & data.mod$Var2 %in% rois[my.modules==2]] <- 'Ventral'
 data.mod$Module[(data.mod$Var1 %in% rois[my.modules==1] & data.mod$Var2 %in% rois[my.modules==2]) |
-                (data.mod$Var1 %in% rois[my.modules==2] & data.mod$Var2 %in% rois[my.modules==1])] <- 'Ventral-Core'
+                (data.mod$Var1 %in% rois[my.modules==2] & data.mod$Var2 %in% rois[my.modules==1])] <- 'Ventral-Dorsal'
 
 
 # within-subject mean module connectivity (fisher z transformed)
@@ -1051,14 +1051,14 @@ Event modulation of connectivity within and between modules:
 ```{r}
 
 ### mean modulation by module -------------------------------------------
-# add module IDs (within-Ventral, within-Core, Ventral-Core)
+# add module IDs (within-Ventral, within-Dorsal, Ventral-Dorsal)
 data.mod = melt(connMatrix)  #Var3 = subject
 data.mod <- data.mod[data.mod$value != 0,]  # remove upper triangle
 data.mod$Module = ''
-data.mod$Module[data.mod$Var1 %in% rois[my.modules==1] & data.mod$Var2 %in% rois[my.modules==1]] <- 'Core'
+data.mod$Module[data.mod$Var1 %in% rois[my.modules==1] & data.mod$Var2 %in% rois[my.modules==1]] <- 'Dorsal'
 data.mod$Module[data.mod$Var1 %in% rois[my.modules==2] & data.mod$Var2 %in% rois[my.modules==2]] <- 'Ventral'
 data.mod$Module[(data.mod$Var1 %in% rois[my.modules==1] & data.mod$Var2 %in% rois[my.modules==2]) |
-                (data.mod$Var1 %in% rois[my.modules==2] & data.mod$Var2 %in% rois[my.modules==1])] <- 'Ventral-Core'
+                (data.mod$Var1 %in% rois[my.modules==2] & data.mod$Var2 %in% rois[my.modules==1])] <- 'Ventral-Dorsal'
 
 data.summary.subject <- data.frame(
                          data.mod %>% group_by(Var3, Module) %>%
@@ -1118,7 +1118,7 @@ plot.A <- ggarrange(p,p2, ncol = 2, nrow = 1, widths = c(4.25,3))
 
 Time-varying connectivity:  
 
-* This analysis uses a sliding-window of 25 TRs (2.47s TR, ~ 60s) to estimate a connectivity matrix at each time point, per subject. Below, I'm first plotting the mean bivariate connectivity of the Ventral, Core, and Ventral-to-Core connections over time.  
+* This analysis uses a sliding-window of 25 TRs (2.47s TR, ~ 60s) to estimate a connectivity matrix at each time point, per subject. Below, I'm first plotting the mean bivariate connectivity of the Ventral PM, Dorsal PM, and Ventral-to-Dorsal connections over time.  
 * I calculate connectivity at each time point with spearman correlation to avoid the strong influence of extreme values with a small window size.  
 * Gray windows indicate event transitions for visualization.  
 ```{r}
@@ -1150,10 +1150,10 @@ for (s in 1:NSubs) {
     # now calculate mean time-varying connectivity by module
     sub_cors <- melt(sub_cors)
     sub_cors$Module = ''
-    sub_cors$Module[sub_cors$Var1 %in% rois[my.modules==1] & sub_cors$Var2 %in% rois[my.modules==1]] <- 'Core'
+    sub_cors$Module[sub_cors$Var1 %in% rois[my.modules==1] & sub_cors$Var2 %in% rois[my.modules==1]] <- 'Dorsal'
     sub_cors$Module[sub_cors$Var1 %in% rois[my.modules==2] & sub_cors$Var2 %in% rois[my.modules==2]] <- 'Ventral'
     sub_cors$Module[(sub_cors$Var1 %in% rois[my.modules==1] & sub_cors$Var2 %in% rois[my.modules==2]) |
-                      (sub_cors$Var1 %in% rois[my.modules==2] & sub_cors$Var2 %in% rois[my.modules==1])] <- 'Ventral-Core'
+                      (sub_cors$Var1 %in% rois[my.modules==2] & sub_cors$Var2 %in% rois[my.modules==1])] <- 'Ventral-Dorsal'
 
     module.means <- sub_cors %>% group_by(Module) %>%
                          summarise(Conn = mean(value, na.rm=TRUE))
@@ -1507,14 +1507,14 @@ colnames(TV.cors) <- c('Subject',unique(TV.module.connectivity$Module))
 
 
 ##### across-subject correlations
-# Core
-TV.subset.Core <- data.frame(subset(TV.module.connectivity, Module == "Core") %>%
+# Dorsal
+TV.subset.Dorsal <- data.frame(subset(TV.module.connectivity, Module == "Dorsal") %>%
                       spread(Subject, Conn))
-subj.cols <- 3:ncol(TV.subset.Core)
+subj.cols <- 3:ncol(TV.subset.Dorsal)
 for (s in 1:length(subjects)) {
-  this.subj   <- TV.subset.Core[,subj.cols[s]]
-  other.subjs <- rowMeans(TV.subset.Core[,subj.cols[-s]])
-  TV.cors$Core[s] <- fisherz(cor(this.subj, other.subjs))
+  this.subj   <- TV.subset.Dorsal[,subj.cols[s]]
+  other.subjs <- rowMeans(TV.subset.Dorsal[,subj.cols[-s]])
+  TV.cors$Dorsal[s] <- fisherz(cor(this.subj, other.subjs))
 }
 
 
@@ -1529,18 +1529,18 @@ for (s in 1:length(subjects)) {
 }
 
 
-# Ventral-to-Core (both directions) - 
-# does time-varying connectivity of the Core subsystem correlate with time-varying connectivity of the Ventral subsystem across subjects? 
+# Ventral-to-Dorsal (both directions) - 
+# does time-varying connectivity of the Dorsal subsystem correlate with time-varying connectivity of the Ventral subsystem across subjects? 
 for (s in 1:length(subjects)) {
   this.subj   <- TV.subset.Ventral[,subj.cols[s]]
-  other.subjs <- rowMeans(TV.subset.Core[,subj.cols[-s]])
+  other.subjs <- rowMeans(TV.subset.Dorsal[,subj.cols[-s]])
   cor.a <- fisherz(cor(this.subj, other.subjs))
   
-  this.subj   <- TV.subset.Core[,subj.cols[s]]
+  this.subj   <- TV.subset.Dorsal[,subj.cols[s]]
   other.subjs <- rowMeans(TV.subset.Ventral[,subj.cols[-s]])
   cor.b <- fisherz(cor(this.subj, other.subjs))
   
-  TV.cors$`Ventral-Core`[s] <- (cor.a + cor.b)/2
+  TV.cors$`Ventral-Dorsal`[s] <- (cor.a + cor.b)/2
 }
 
 
@@ -1571,9 +1571,9 @@ ggplot(TV.cors, aes(x=fisherz2r(Z), fill=Type, color=Type, group=Type)) +
   scale_color_manual(values=module.colors) +
   scale_fill_manual(values=module.colors) +
   geom_vline(xintercept = 0, linetype=1, size=1) +
-  geom_vline(data=cor.means, aes(xintercept = Mean[Type=="Core"]), linetype=2, size=1, color=module.colors[1]) +
+  geom_vline(data=cor.means, aes(xintercept = Mean[Type=="Dorsal"]), linetype=2, size=1, color=module.colors[1]) +
   geom_vline(data=cor.means, aes(xintercept = Mean[Type=="Ventral"]), linetype=2, size=1, color=module.colors[2]) +
-  geom_vline(data=cor.means, aes(xintercept = Mean[Type=="Ventral-Core"]), linetype=2, size=1, color=module.colors[3]) +
+  geom_vline(data=cor.means, aes(xintercept = Mean[Type=="Ventral-Dorsal"]), linetype=2, size=1, color=module.colors[3]) +
   scale_y_continuous(expand=c(0,0,0.01,0)) +
   scale_x_continuous(expand=c(0,0,0,0), limits=c(-1,1)) +
   ggtitle('Distribution of time-varying intersubject correlations') +
