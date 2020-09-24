@@ -47,6 +47,7 @@ library(lsa)
 library(prodlim)
 library(stringr)
 library(caret)
+library(abind)
 
 
 ## define sample to analyze (discovery or replication)
@@ -69,7 +70,8 @@ ci <- function(x) (sqrt(var(x)/length(x))) * 1.96  #function to calculate 95% CI
 
 ### color palettes:
 # color my 8 nodes
-mycolors = c('#f2a68c','#934be0','#929292','#e6664d','#8ce9f7','#3c7ff5','#fcd841','#95df3a')
+mycolors = c('#f2a68c','#929292','#e6664d','#8ce9f7','#3c7ff5','#934be0','#fcd841','#95df3a')
+# for control, aHipp = '#ba8ceb'
 module.colors <- c("#fcd841","#3c7ff5","#8ce9f7")  #for "Dorsal PM", "Ventral PM", "Ventral-to-Dorsal"
 
 # color scales
@@ -110,6 +112,7 @@ cat('Analyzing PMN connectivity over',nTime,'TRs (',round(nTime*my.TR,2),'second
 ```
 
 # Data Inspection  
+
 ## ROI time series  
 Mean (across voxels) time series from unsmoothed data  
 ```{r, fig.width = 6, fig.height = 4}
@@ -391,7 +394,7 @@ for (n in 1:n.mod) {
 
 # add images showing overlap of connections by submodule
 p3 <- ggdraw() +
-  draw_image(paste('./',this.group,'/wholebrain/group-average/task-movie_quantile_',th_WB,'_sum_Dorsal.png',sep="")) + 
+  draw_image(paste('./',this.group,'/wholebrain/group-average/task-movie_quantile_',th_WB,'_sum_DorsalPM.png',sep="")) + 
   ggtitle('"Dorsal PM": 20% density') + labs(tag="d") +
   geom_label(aes(x=0.5, y=0.055, label="Connected Regions"), 
              size=4.5, color="black", fill="white", label.size=0) +
@@ -402,7 +405,7 @@ p3 <- ggdraw() +
         plot.margin = margin(0, 0, 0, 0, "cm"))
 
 p4 <- ggdraw() +
-  draw_image(paste('./',this.group,'/wholebrain/group-average/task-movie_quantile_',th_WB,'_sum_Ventral.png',sep="")) + 
+  draw_image(paste('./',this.group,'/wholebrain/group-average/task-movie_quantile_',th_WB,'_sum_VentralPM.png',sep="")) + 
   ggtitle('"Ventral PM": 20% density') + labs(tag="e") +
   geom_label(aes(x=0.5, y=0.055, label="Connected Regions"), 
              size=4.5, color="black", fill="white", label.size=0) +
@@ -434,7 +437,9 @@ ggsave(paste('./',this.group,'/figures/seed-to-voxel_',this.group,'.pdf',sep="")
 
 From now on, ROIs are sorted into the above modules -- 'Ventral PM' and 'Dorsal PM'.   
 
-# Intranetwork connectivity
+# Intranetwork connectivity  
+
+## Functional  
 Bivariate network = Pearson's correlation between the time-series of PMM regions, per subject.  
 Partial network = correlation between ROIi and ROIj and controlling for all 6 other nodes.    
 ```{r}
@@ -502,7 +507,7 @@ p1 <- ggplot(data.summary.subject, aes(x=Module, y=fisherz2r(Strength), color=Mo
   geom_hline(yintercept = 0, size = 1) +
   scale_y_continuous(expand = c(0,0.01,0,0.01), limits=c(-.25,.65)) +
   scale_x_discrete(labels = function(x) str_wrap(x, width = 7)) +
-  labs(y='R', tag="c") +
+  labs(y='Pearson R', tag="d") +
   theme(axis.line.x = element_line(color = "black", size = 1), axis.line.y = element_line(color = "black", size = 1),
         axis.text.x = element_text(size = 20, angle=30, hjust=1, vjust=1),
         axis.text.y = element_text(size = 18),
@@ -510,7 +515,7 @@ p1 <- ggplot(data.summary.subject, aes(x=Module, y=fisherz2r(Strength), color=Mo
         panel.background = element_blank(),
         legend.position="none",
         plot.tag = element_text(size = 34, face="bold"),
-        plot.margin = margin(0.1, 0.1, 0, 0.1, "cm"))
+        plot.margin = margin(0.2, 0.2, 0.2, 0.2, "cm"))
 
 
 #### means and CIs per module
@@ -571,7 +576,7 @@ p2 <- ggplot(data.summary.subject, aes(x=Module, y=fisherz2r(Strength), color=Mo
   geom_hline(yintercept = 0, size = 1) +
   scale_y_continuous(expand = c(0,0.01,0,0.01), limits=c(-.25,.65)) +
   scale_x_discrete(labels = function(x) str_wrap(x, width = 7)) +
-  labs(y='R', tag="d") +
+  labs(y='Pearson R', tag="e") +
   theme(axis.line.x = element_line(color = "black", size = 1), axis.line.y = element_line(color = "black", size = 1),
         axis.text.x = element_text(size = 20, angle=30, hjust=1, vjust=1),
         axis.text.y = element_text(size = 18),
@@ -579,7 +584,7 @@ p2 <- ggplot(data.summary.subject, aes(x=Module, y=fisherz2r(Strength), color=Mo
         panel.background = element_blank(),
         legend.position="none",
         plot.tag = element_text(size = 34, face="bold"),
-        plot.margin = margin(0.1, 0.1, 0, 0.1, "cm"))
+        plot.margin = margin(0.2, 0.2, 0.2, 0.2, "cm"))
 
 
 #### means and CIs per module
@@ -590,7 +595,7 @@ kable(data.summary.group, format = "pandoc",
       caption = "Mean partial connectivity within and between PM modules")
 
 
-#### t-tests to validate whole-brain defined modules in terms of bivariate connectivity
+#### t-tests to validate whole-brain defined modules in terms of partial connectivity
 # runs on each pair of modules
 ts <- data.summary.subject %>%
             pairwise_t_test(
@@ -636,15 +641,17 @@ p3 <- suppressMessages(ggnet2(net,
                  layout.exp = 0.05) +
   scale_y_continuous(expand=c(.05,.05,.05,.05)) +
   scale_x_continuous(expand=c(.05,.05,.05,.05)) +
-  theme(plot.margin = margin(0.1, 0.1, 0.1, 1.1, "cm"),
+    ggtitle('Bivariate Functional') +
+  theme(plot.title = element_text(hjust = 0.5, size=28, margin=margin(0,0,20,0), face="plain"), 
+        plot.margin = margin(0.2, 0.2, 0, 1.5, "cm"),
         axis.line.x = element_blank(), axis.line.y = element_blank(),
         axis.text.y = element_blank(), axis.ticks.y = element_blank(),
         axis.text.x = element_blank(), axis.ticks.x = element_blank()))
 
 p3 <- ggarrange(p3) + 
-      labs(tag="a") + 
+      labs(tag="b") + 
       theme(plot.tag = element_text(size = 34, face="bold"),
-            plot.margin = margin(0.1, 0, 0, 0.1, "cm"))
+            plot.margin = margin(0.2, 0.2, 0, 0.2, "cm"))
 
 
 
@@ -672,21 +679,193 @@ p4 <- suppressMessages(ggnet2(net,
                  layout.exp = 0.05) +
   scale_y_continuous(expand=c(.05,.05,.05,.05)) +
   scale_x_continuous(expand=c(.05,.05,.05,.05)) +
-  theme(plot.margin = margin(0.1, 0.1, 0.1, 1.1, "cm"),
+    ggtitle('Partial Functional') +
+  theme(plot.title = element_text(hjust = 0.5, size=28, margin=margin(0,0,20,0), face="plain"), 
+        plot.margin = margin(0.2, 0.2, 0, 1.5, "cm"),
         axis.line.x = element_blank(), axis.line.y = element_blank(),
         axis.text.y = element_blank(), axis.ticks.y = element_blank(),
         axis.text.x = element_blank(), axis.ticks.x = element_blank()))
 
 p4 <- ggarrange(p4) + 
-      labs(tag="b") + 
+      labs(tag="c") + 
       theme(plot.tag = element_text(size = 34, face="bold"),
-            plot.margin = margin(0.1, 0, 0, 0.1, "cm"))
+            plot.margin = margin(0.2, 0.2, 0, 0.2, "cm"))
 
 ```
 
-```{r, fig.width = 9, fig.height = 10}
+## Structural  
+Streamline counts are loaded for every pair of rois from the HOA sub-parcellated atlas. PMN regions are those that show the greatest overlap with the functional clusters. Path distance = the number of edges (weighted by streamline count) required to connect every pair of PMN regions.  
 
-myPlot <- ggarrange(p3,p4,p1,p2, ncol = 2, nrow=2, heights=c(1,1.1))
+* Create distance matrix:
+```{r}
+
+### load streamline connectomes for this group's subjects
+dwi_files = dir('../../dwi-data/HOA-connectomes/')
+idx = unlist(sapply(subjects, grep, dwi_files))
+dwi_subjs <- names(idx)
+dwi_files <- dwi_files[idx]
+
+
+cat('Found',length(dwi_files),this.group,'group subjects with DWI data')
+
+#bind data and add column for subject ID, as well as video and podcast names
+dwiData = do.call(abind, 
+                  c(lapply(dwi_files, function(x) { data = read.csv(
+                                                           paste('../../dwi-data/HOA-connectomes/',x,sep=""), 
+                                                           header = F,sep=" ")
+                                                           if (nrow(data) == 470) { #if last row/col of 471 matrix is empty, that ROI was unconnected to add all 0s
+                                                             data[471,] <- 0
+                                                             data[,471] <- 0
+                                                           }
+                                                           return(data) 
+                                                         } ),
+                  along=3))
+
+# weights are interpreted as distances, so we need to reverse the streamlines -- lower (non-zero) == closer
+# scale so 0 = no connection and 1 = furthest away (fewest connections)
+dwiData[dwiData > 0] <- ((max(dwiData)+1) - dwiData[dwiData > 0]) / max(dwiData)
+
+
+### Create a distance matrix, weighted by streamline counts
+dist.mat <- array(NA,c(dim(dwiData)))
+for (i in 1:length(dwi_files)) {
+  temp <- dwiData[,,i]
+  # only upper triangle stored in csvs, so mirror
+  temp[lower.tri(temp, diag=F)] <- t(temp)[lower.tri(temp, diag=F)]
+  diag(temp) <- 0
+
+  # create distance matrix from binarized connections
+  temp <- graph_from_adjacency_matrix(temp, weighted = TRUE)
+  my.dist <- distances(temp)
+  dist.mat[,,i] <- my.dist
+}
+
+
+## now select just PMN-like rois
+hoa_pm_rois = read.csv('../../dwi-data/PMN_HOA_regions.csv', header=T)
+pm.dist.mat <- dist.mat[hoa_pm_rois$HOA,hoa_pm_rois$HOA,]
+colnames(pm.dist.mat) <- hoa_pm_rois$Name
+rownames(pm.dist.mat) <- hoa_pm_rois$Name
+
+
+# re-order pm distance matrix by our roi order (from functional subsystems)
+pm.dist.mat  <- pm.dist.mat[match(rois,hoa_pm_rois$Name),match(rois,hoa_pm_rois$Name),]
+pm.dist.mean <- apply(pm.dist.mat, c(1,2), mean)
+
+
+
+# plot matrix of structural distances
+data = melt(pm.dist.mean)
+data <- data[data$Var1 != data$Var2,] #remove diagonal
+pD.1 <- ggplot(data, aes(Var1, Var2, fill=value, color=value)) +
+  geom_tile() +
+  scale_fill_gradientn(limits= c(0.5,3),
+                       colors = rev(heat.colors(10)),
+                       guide = guide_colorbar(frame.colour = "black")) +
+  scale_color_gradientn(limits= c(0.5,3),
+                       colors = rev(heat.colors(10))) +
+  labs(fill="Weighted\nPath Length", tag="a") +
+  ggtitle('Structural Connections') +
+  guides(color=FALSE) +
+  geom_rect(xmin=.5, xmax=length(rois)+.5, ymin=.5, ymax=length(rois)+.5,
+              fill=NA, color="black",size=1) +
+  theme(plot.title = element_text(hjust = 0.5, size=28, margin=margin(0,0,20,0), face="plain"),
+        axis.text.x = element_text(size = 18, hjust=1, vjust=1, angle=45, color = mycolors),
+        axis.text.y = element_text(size = 18, color = mycolors),
+        axis.line.x = element_blank(),axis.line.y = element_blank(),
+        axis.title.x = element_blank(), axis.title.y = element_blank(),
+        legend.text = element_text(size=16),legend.title = element_text(size=16),
+        legend.key.width = unit(0.5,"cm"), legend.key.height = unit(1,"cm"),
+        plot.tag = element_text(size = 34, face="bold"),
+        plot.margin = margin(0.2, 4, 0.2, 5, "cm"))
+
+
+### store for later func-struc correlations:
+dwi.pmn.distances <- melt(pm.dist.mat)
+
+```
+
+Correlation between functional and structural PMN matrices, both within subjects (fisher z transformed for one-sample t-test) and on group-averaged connections:  
+```{r}
+
+struc.func.cors <- data.frame(array(0,c(length(dwi_subjs)*2,3)))
+colnames(struc.func.cors) <- c('Subject','Type','Z')
+
+n=0
+for (s in 1:length(dwi_subjs)) {
+  
+  struc_data = pm.dist.mat[,,s]
+  struc_data[upper.tri(struc_data, diag=T)] <- NA
+  struc_data <- struc_data[!is.na(struc_data)]
+  
+  # match subject
+  func_idx = which(dwi_subjs[s] == subjects)
+
+  # bivariate correlation
+  n=n+1
+  func_data = node.bivariate[,,func_idx]
+  func_data[upper.tri(func_data, diag=T)] <- NA
+  func_data <- func_data[!is.na(func_data)]  
+  struc.func.cors$Subject[n] <- dwi_subjs[s]
+  struc.func.cors$Type[n] <- 'Bivariate'
+  struc.func.cors$Z[n] <- fisherz(cor(struc_data,func_data))
+
+  # partial correlation
+  n=n+1
+  func_data = node.partial[,,func_idx]
+  func_data[upper.tri(func_data, diag=T)] <- NA
+  func_data <- func_data[!is.na(func_data)]  
+  struc.func.cors$Subject[n] <- dwi_subjs[s]
+  struc.func.cors$Type[n] <- 'Partial'
+  struc.func.cors$Z[n] <- fisherz(cor(struc_data,func_data))
+}
+
+
+### t-tests against 0 and between bivariate and partial
+ts <- struc.func.cors %>%
+             group_by(Type) %>%
+             rstatix::t_test(Z ~ 1, mu=0,
+                             p.adjust.method = "none",
+                             detailed=T)
+kable(ts, caption = 'Significant relationship between strutural and functional PMN connectivity within subjects?')
+
+ts <- struc.func.cors %>%
+             rstatix::t_test(Z ~ Type, paired=TRUE,
+                             p.adjust.method = "none",
+                             detailed=T)
+kable(ts, caption = 'Difference between bivariate and partial functional-structural relationship within subjects?')
+
+
+### Correlations with group-averaged matrices (upper triangle, unique connections, only):
+struc.biv.cor <- cor.test(node.bivariate.mean[upper.tri(node.bivariate.mean, diag=F)],
+                pm.dist.mean[upper.tri(pm.dist.mean, diag=F)])
+pander(struc.biv.cor,
+       caption = 'Group-averaged bivariate to structural correlation')
+
+struc.par.cor <- cor.test(node.partial.mean[upper.tri(node.partial.mean, diag=F)],
+                pm.dist.mean[upper.tri(pm.dist.mean, diag=F)])
+pander(struc.par.cor,
+       caption = 'Group-averaged partial to structural correlation')
+
+```
+
+Combine plots:  
+```{r, fig.width = 9.5, fig.height = 15}
+
+myPlot <- ggarrange(p3,p4,p1,p2, ncol = 2, nrow=2)
+# add correlations between func and struc:
+myPlot <- ggarrange(pD.1, myPlot, nrow=2, heights=c(1,2)) +
+             geom_curve(aes(x = 0.2, y = 0.78, xend = 0.2, yend = 0.65),
+               color ="black", size=1, curvature = 0.4, angle = 90,
+               arrow = arrow(length = unit(0.4,"cm"),type = "closed")) +
+             geom_label(x=0.15, y=0.7, size=7,
+                        label=paste('r = ',round(struc.biv.cor$estimate,2),sep="")) +
+              geom_curve(aes(x = 0.8, y = 0.78, xend = 0.8, yend = 0.65),
+               color ="black", size=1, curvature = -0.4, angle = 90,
+               arrow = arrow(length = unit(0.4,"cm"),type = "closed")) +
+             geom_label(x=0.85, y=0.7, size=7,
+                        label=paste('r = ',round(struc.par.cor$estimate,2),sep="")) +
+             geom_text(aes(x=0.87, y=0.715), size=15, label='*') 
 plot(myPlot)
 
 ## save as Rdata for merging with other group
@@ -1012,6 +1191,8 @@ p <- ggplot(data, aes(Var1, Var2, fill=value, color=value)) +
                         colors = heat.colors(10), na.value = "white") +
   labs(fill="Beta", tag="a") +
   guides(color=FALSE) +
+  geom_rect(xmin=.5, xmax=length(rois)+.5, ymin=.5, ymax=length(rois)+.5,
+              fill=NA, color="black",size=1) +
   theme(axis.text.x = element_text(size = 18, hjust=1, vjust=1, angle=45, color = mycolors),
         axis.text.y = element_text(size = 18, color = mycolors),
         axis.line.x = element_blank(),axis.line.y = element_blank(),
@@ -1048,6 +1229,10 @@ data.mod$Module[data.mod$Var1 %in% rois[my.modules==1] & data.mod$Var2 %in% rois
 data.mod$Module[data.mod$Var1 %in% rois[my.modules==2] & data.mod$Var2 %in% rois[my.modules==2]] <- 'Ventral'
 data.mod$Module[(data.mod$Var1 %in% rois[my.modules==1] & data.mod$Var2 %in% rois[my.modules==2]) |
                 (data.mod$Var1 %in% rois[my.modules==2] & data.mod$Var2 %in% rois[my.modules==1])] <- 'Ventral-Dorsal'
+
+### store this modulation for correlations with structural
+event.pmn.connectivity <- data.mod
+
 
 data.summary.subject <- data.frame(
                          data.mod %>% group_by(Var3, Module) %>%
@@ -1087,7 +1272,7 @@ p2 <- ggplot(data.summary.subject, aes(x=Module, y=Strength, color=Module)) +
   geom_boxplot(size=1, width=.6, fill=NA, outlier.color=NA) +
   geom_text(data=ts.plot, aes(y=.70, label=p.signif), color="black", size = 14) +
   geom_hline(yintercept = 0, size = 1) +
-  scale_y_continuous(expand = c(0.02,0.02,0.02,0.02), limits=c(-.4,.75)) +
+  scale_y_continuous(expand = c(0.02,0.02,0.02,0.02), limits=c(-.45,.75)) +
   scale_x_discrete(labels = function(x) str_wrap(x, width = 7)) +
   labs(y='Beta', tag="b") +
   theme(axis.line.x = element_line(color = "black", size = 1), axis.line.y = element_line(color = "black", size = 1),
@@ -1203,7 +1388,7 @@ plot.B <- ggplot(TV.connectivity.mean) +
   geom_line(aes(x=Time*my.TR, y=Mean, color=Module), size=1.5) +
   scale_y_continuous(expand=c(0,0,0,0), limits=c(.1,.5)) +
   scale_x_continuous(expand=c(0,0,0,0)) +
-  labs(x="Time (seconds)", y='Mean Connectivity', tag="c") +
+  labs(x="Time (seconds)", y='Mean Connectivity', tag="d") +
   theme(axis.line.x = element_line(color = "black", size = 1),
         axis.line.y = element_line(color = "black", size = 1),
         axis.text.x = element_text(size = 20), axis.text.y = element_text(size = 18),
@@ -1221,9 +1406,73 @@ save(TV.module.connectivity, file=timevarying.file)
 
 ```
 
-```{r, fig.width = 10, fig.height = 8.5}
+### Structure-function correlations  
+Is the change in functional connectivity at event transitions facilitated by or inhibited by the structural integration of that ROI with the network (weighted shortest path)?  
+```{r}
 
-myPlot <- ggarrange(plot.A,plot.B, ncol = 1, nrow=2, heights=c(1.4,1))
+colnames(event.pmn.connectivity)[4] <- 'Beta'
+colnames(dwi.pmn.distances)[4] <- 'Path'
+
+# now rename subject ids with actual strings to match
+event.pmn.connectivity$Var3 <- subjects[event.pmn.connectivity$Var3]
+dwi.pmn.distances$Var3 <- dwi_subjs[dwi.pmn.distances$Var3]
+
+struc.func <- merge(dwi.pmn.distances, event.pmn.connectivity)
+
+
+# now average by Module and correlate (focusing on Ventral subsystem that actually shows an increase in event-transition connectivity):
+struc.func.module <- struc.func %>% group_by(Var3, Module) %>%
+                      summarise(EventBeta = mean(Beta),
+                                PathLength = mean(Path)) %>%
+                      subset(Module != "Dorsal") %>% droplevels()
+struc.func.cor <- struc.func.module %>% group_by(Module) %>%
+                      summarise(R = cor.test(EventBeta, PathLength)$estimate,
+                                p = p.adjust(cor.test(EventBeta, PathLength)$p.value),
+                                df = cor.test(EventBeta, PathLength)$parameter)
+kable(struc.func.cor, 
+      caption ='Correlations between change in functional connectivity at event-transitions and average structural path length (bonferroni-corrected)')
+
+
+
+### now add correlation plots:
+plots = list()
+plot.modules <- unique(struc.func.module$Module)
+for (r in 1:nrow(struc.func.cor)) {
+  
+  data = subset(struc.func.module, Module == plot.modules[r]) %>% 
+                     droplevels()
+
+  plots[[r]] <- ggplot(data, 
+                       aes(x=EventBeta, y=PathLength)) +
+    geom_point(color=module.colors[r+1], size=3, alpha=.8) +
+    ggtitle(plot.modules[r]) +
+    geom_smooth(method = "lm", color="black", size=1.5) +
+    labs(y="Structural Path Length", x="Event-Transition Beta") +
+    theme(plot.title = element_text(hjust = 0.5, size=22, face="plain", margin=margin(0,0,20,0)),
+          axis.line.x = element_line(color = "black", size = 1), axis.line.y = element_line(color = "black", size = 1),
+          axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16),
+          axis.title.y = element_text(size = 16, margin=margin(0,10,0,0)),
+          axis.title.x = element_text(size = 18, margin=margin(10,0,0,0)),
+          panel.background = element_blank(),
+          legend.position="none",
+          plot.margin = margin(0, 1.5, 0.2, 1.5, "cm"))
+}
+
+plot.C <- ggarrange(plotlist = plots, ncol=2) +
+        theme(plot.tag = element_text(size = 32, face = "bold"),
+              plot.margin = margin(0, 0.2, 0.4, 0.2, "cm")) +
+        labs(tag="c") +
+        geom_label(x=0.41, y=0.85, size=5,
+              label = paste('r = ',round(struc.func.cor$R[1],3),sep="")) +
+        geom_label(x=0.9, y=0.85, size=5,
+              label = paste('r = ',round(struc.func.cor$R[2],3),sep=""))
+
+```
+
+Combine Plots:  
+```{r, fig.width = 10, fig.height = 12}
+
+myPlot <- ggarrange(plot.A,plot.C,plot.B, ncol = 1, nrow=3, heights=c(1.4,1.2,1))
 plot(myPlot)
 
 ## save as Rdata for merging with other group

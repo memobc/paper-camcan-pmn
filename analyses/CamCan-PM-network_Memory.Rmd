@@ -569,7 +569,7 @@ tv.plot <- ggplot(TV.summary) +
   geom_ribbon(alpha=0.3, aes(x=Time*my.TR, fill=Group,
                              ymin=Mean-SE, ymax=Mean+SE), color=NA) +
   geom_line(aes(x=Time*my.TR, y=Mean, color=Group), size=1.5) +
-  scale_y_continuous(expand=c(0,0,0,0), limits=c(.15,.55)) +
+  scale_y_continuous(expand=c(0,0,0,0), limits=c(.1,.55)) +
   scale_x_continuous(expand = c(0,0,0,0)) +
   guides(fill=FALSE) +
   labs(x="Time (seconds)", y='Mean Connectivity', tag="g", color="Memory") +
@@ -666,7 +666,7 @@ core.plot <- ggplot(TV.summary) +
   geom_ribbon(alpha=0.3, aes(x=Time*my.TR, fill=Group,
                              ymin=Mean-SE, ymax=Mean+SE), color=NA) +
   geom_line(aes(x=Time*my.TR, y=Mean, color=Group), size=1.5) +
-  scale_y_continuous(expand=c(0,0,0,0), limits=c(.05,.55)) +
+  scale_y_continuous(expand=c(0,0,0,0), limits=c(.05,.45)) +
   scale_x_continuous(expand = c(0,0,0,0)) +
   guides(fill=FALSE) +
   ggtitle("Dorsal: High vs. Low Memory") +
@@ -700,7 +700,7 @@ cv.plot <- ggplot(TV.summary) +
   geom_ribbon(alpha=0.3, aes(x=Time*my.TR, fill=Group,
                              ymin=Mean-SE, ymax=Mean+SE), color=NA) +
   geom_line(aes(x=Time*my.TR, y=Mean, color=Group), size=1.5) +
-  scale_y_continuous(expand=c(0,0,0,0), limits=c(.05,.55)) +
+  scale_y_continuous(expand=c(0,0,0,0), limits=c(.05,.45)) +
   scale_x_continuous(expand = c(0,0,0,0)) +
   guides(fill=FALSE) +
   ggtitle("Ventral-Dorsal: High vs. Low Memory") +
