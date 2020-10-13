@@ -708,21 +708,22 @@ dwi_files <- dwi_files[idx]
 
 cat('Found',length(dwi_files),this.group,'group subjects with DWI data')
 
-#bind data and add column for subject ID, as well as video and podcast names
+#bind streamline matrices for all subjects
 dwiData = do.call(abind, 
                   c(lapply(dwi_files, function(x) { data = read.csv(
                                                            paste('../../dwi-data/HOA-connectomes/',x,sep=""), 
                                                            header = F,sep=" ")
-                                                           if (nrow(data) == 470) { #if last row/col of 471 matrix is empty, that ROI was unconnected to add all 0s
+                                                           if (nrow(data) == 470) { #if last row/col of 471 matrix is empty, that ROI was unconnected so add all 0s
                                                              data[471,] <- 0
                                                              data[,471] <- 0
                                                            }
+                                                           diag(data) = 0  #remove self-connections
                                                            return(data) 
                                                          } ),
-                  along=3))
+                    along=3))
 
-# weights are interpreted as distances, so we need to reverse the streamlines -- lower (non-zero) == closer
-# scale so 0 = no connection and 1 = furthest away (fewest connections)
+# weights are interpreted as path lengths, so we need to reverse the streamlines -- lower (non-zero) == closer
+# 0 = no connection and 1 = furthest away (fewest streamlines between nodes)
 dwiData[dwiData > 0] <- ((max(dwiData)+1) - dwiData[dwiData > 0]) / max(dwiData)
 
 
@@ -732,9 +733,8 @@ for (i in 1:length(dwi_files)) {
   temp <- dwiData[,,i]
   # only upper triangle stored in csvs, so mirror
   temp[lower.tri(temp, diag=F)] <- t(temp)[lower.tri(temp, diag=F)]
-  diag(temp) <- 0
 
-  # create distance matrix from binarized connections
+  # create distance matrix from node connections
   temp <- graph_from_adjacency_matrix(temp, weighted = TRUE)
   my.dist <- distances(temp)
   dist.mat[,,i] <- my.dist
@@ -1427,10 +1427,10 @@ struc.func.module <- struc.func %>% group_by(Var3, Module) %>%
                       subset(Module != "Dorsal") %>% droplevels()
 struc.func.cor <- struc.func.module %>% group_by(Module) %>%
                       summarise(R = cor.test(EventBeta, PathLength)$estimate,
-                                p = p.adjust(cor.test(EventBeta, PathLength)$p.value),
+                                p = cor.test(EventBeta, PathLength)$p.value,
                                 df = cor.test(EventBeta, PathLength)$parameter)
 kable(struc.func.cor, 
-      caption ='Correlations between change in functional connectivity at event-transitions and average structural path length (bonferroni-corrected)')
+      caption ='Correlations between change in functional connectivity at event-transitions and average structural path length')
 
 
 
@@ -1447,7 +1447,7 @@ for (r in 1:nrow(struc.func.cor)) {
     geom_point(color=module.colors[r+1], size=3, alpha=.8) +
     ggtitle(plot.modules[r]) +
     geom_smooth(method = "lm", color="black", size=1.5) +
-    labs(y="Structural Path Length", x="Event-Transition Beta") +
+    labs(y="Structural Path Length", x="Event Transition Beta") +
     theme(plot.title = element_text(hjust = 0.5, size=22, face="plain", margin=margin(0,0,20,0)),
           axis.line.x = element_line(color = "black", size = 1), axis.line.y = element_line(color = "black", size = 1),
           axis.text.x = element_text(size = 16), axis.text.y = element_text(size = 16),
