@@ -365,7 +365,7 @@ p2 <- ggplot(data, aes(Var1, Var2, fill=value)) +
   geom_text(aes(label = round(value)), size = 4, color="white") +
   scale_fill_gradientn(limits=c(40,100), colors = gray.colors(12), na.value = "white",
                        guide = guide_colorbar(frame.colour = "black")) +
-  labs(fill="% Same\nModule", tag="c") +
+  labs(fill="% Same\nModule", tag="b") +
   ggtitle('Community probability')+
   theme(plot.title = element_text(hjust = 0.5, size=24, margin=margin(0,0,20,0), face="plain"),  
         axis.text.x = element_text(size = 16, color = mycolors, hjust=1, vjust=1, angle=45), 
@@ -395,7 +395,7 @@ for (n in 1:n.mod) {
 # add images showing overlap of connections by submodule
 p3 <- ggdraw() +
   draw_image(paste('./',this.group,'/wholebrain/group-average/task-movie_quantile_',th_WB,'_sum_DorsalPM.png',sep="")) + 
-  ggtitle('"Dorsal PM": 20% density') + labs(tag="d") +
+  ggtitle('"Dorsal PM": 20% density') + labs(tag="c") +
   geom_label(aes(x=0.5, y=0.055, label="Connected Regions"), 
              size=4.5, color="black", fill="white", label.size=0) +
   geom_label(aes(x=0.5, y=0.105, label="0                        5"), 
@@ -406,7 +406,7 @@ p3 <- ggdraw() +
 
 p4 <- ggdraw() +
   draw_image(paste('./',this.group,'/wholebrain/group-average/task-movie_quantile_',th_WB,'_sum_VentralPM.png',sep="")) + 
-  ggtitle('"Ventral PM": 20% density') + labs(tag="e") +
+  ggtitle('"Ventral PM": 20% density') + labs(tag="d") +
   geom_label(aes(x=0.5, y=0.055, label="Connected Regions"), 
              size=4.5, color="black", fill="white", label.size=0) +
   geom_label(aes(x=0.5, y=0.105, label="0                        3"), 
